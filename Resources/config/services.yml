@@ -1,0 +1,22 @@
+parameters:
+    smile.find.class: Smile\EzHelpersBundle\Services\SmileFindService
+    smile.content.class: Smile\EzHelpersBundle\Services\SmileContentService
+    smile.convert.class: Smile\EzHelpersBundle\Services\SmileConvertService
+    smile.user.class: Smile\EzHelpersBundle\Services\SmileUserService
+
+services:
+    smile.find:
+        class: '%smile.find.class%'
+        arguments: ["@ezpublish.api.repository", "@ezpublish.config.resolver.core", "@smile.convert"]
+
+    smile.content:
+        class: '%smile.content.class%'
+        arguments: ["@ezpublish.api.repository"]
+
+    smile.convert:
+        class: '%smile.convert.class%'
+        arguments: ["@ezpublish.api.repository", "@smile.content"]
+
+    smile.user:
+        class: '%smile.user.class%'
+        arguments: ["@ezpublish.api.repository"]
