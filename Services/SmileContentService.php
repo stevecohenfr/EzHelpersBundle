@@ -1,19 +1,34 @@
 <?php
+
 /**
- * Created by PhpStorm.
- * User: stcoh
- * Date: 03/11/17
- * Time: 11:47
+ * Smile helper for content manipulation
+ *
+ * PHP Version 7.1
+ *
+ * @category SmileService
+ * @package  Smile\EzHelpersBundle\Services
+ * @author   Steve Cohen <cohensteve@hotmail.fr>
+ * @license  http://opensource.org/licenses/gpl-license.php GNU Public License
+ * @link     https://github.com/stevecohenfr/EzHelpersBundle Git of EzHelpersBundle
  */
 
 namespace Smile\EzHelpersBundle\Services;
 
+use eZ\Publish\API\Repository\Values\Content\Content;
+use eZ\Publish\API\Repository\Values\Content\Location;
 use eZ\Publish\Core\SignalSlot\Repository;
 
+/**
+ * Class SmileContentService
+ *
+ * @category SmileService
+ * @package  Smile\EzHelpersBundle\Services
+ * @author   Steve Cohen <cohensteve@hotmail.fr>
+ * @license  http://opensource.org/licenses/gpl-license.php GNU Public License
+ * @link     https://github.com/stevecohenfr/EzHelpersBundle Git of EzHelpersBundle
+ */
 class SmileContentService
 {
-
-    /** @var \eZ\Publish\Core\SignalSlot\Repository */
     protected $repository;
 
     protected $contentService;
@@ -26,7 +41,14 @@ class SmileContentService
 
     protected $searchService;
 
-    public function  __construct(Repository $repository)
+    /**
+     * SmileContentService constructor.
+     *
+     * @param Repository $repository eZPlatform API Repository
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
+     */
+    public function __construct(Repository $repository)
     {
         $this->repository = $repository;
         $this->contentService = $repository->getContentService();
@@ -36,12 +58,41 @@ class SmileContentService
         $this->searchService = $repository->getSearchService();
     }
 
-    public function getClassIdentifier( $content )
+    /**
+     * Return the content class identifier of a content
+     *
+     * @param Content $content The content you want the class identifier
+     *
+     * @return string
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\NotFoundException
+     * @author Steve Cohen <cohensteve@hotmail.fr>
+     */
+    public function getClassIdentifier(Content $content)
     {
-        $contentType = $this->contentTypeService->loadContentType( $content->contentInfo->contentTypeId );
+        $contentType = $this->contentTypeService->loadContentType($content->contentInfo->contentTypeId);
         return $contentType->identifier;
     }
 
+    /**
+     * Create and publish a new content in one or more locations
+     *
+     * @param String $contentTypeidentifier Class identifier that you want to create a content
+     * @param array  $parentLocationIds     One or more parent location id where you want to create your object
+     * @param array  $fieldValues           An associative array to fill the field array('field_name' => "Field Value")
+     * @param String $lang                  The lang you want to create your content (default: DefaultLanguageCode)
+     *
+     * @return \eZ\Publish\API\Repository\Values\Content\Content
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\BadStateException
+     * @throws \eZ\Publish\API\Repository\Exceptions\ContentFieldValidationException
+     * @throws \eZ\Publish\API\Repository\Exceptions\ContentValidationException
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     * @throws \eZ\Publish\API\Repository\Exceptions\NotFoundException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
+     */
     public function createContent($contentTypeidentifier, array $parentLocationIds, $fieldValues = array(), $lang = null)
     {
         if ($lang == null) {
@@ -67,5 +118,22 @@ class SmileContentService
         $content = $this->contentService->publishVersion($draft->versionInfo);
 
         return $content;
+    }
+
+    /**
+     * Get the path array (array of location ids) of a location
+     *
+     * @param  Location $location
+     *
+     * @return array
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
+     */
+    public function getPathArray(Location $location)
+    {
+        $path_array = explode("/", $location->pathString);
+        $path_array = array_slice($path_array, 3, count($path_array) - 4);
+
+        return $path_array;
     }
 }

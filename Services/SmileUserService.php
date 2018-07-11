@@ -1,9 +1,15 @@
 <?php
+
 /**
- * Created by PhpStorm.
- * User: stcoh
- * Date: 03/11/17
- * Time: 11:47
+ * Smile helper to manipulate users
+ *
+ * PHP Version 7.1
+ *
+ * @category SmileService
+ * @package  Smile\EzHelpersBundle\Services
+ * @author   Steve Cohen <cohensteve@hotmail.fr>
+ * @license  http://opensource.org/licenses/gpl-license.php GNU Public License
+ * @link     https://github.com/stevecohenfr/EzHelpersBundle Git of EzHelpersBundle
  */
 
 namespace Smile\EzHelpersBundle\Services;
@@ -12,11 +18,20 @@ use eZ\Publish\API\Repository\Values\User\User;
 use eZ\Publish\API\Repository\Values\User\UserGroup;
 use eZ\Publish\Core\SignalSlot\Repository;
 
+/**
+ * Class SmileUserService
+ *
+ * @category SmileService
+ * @package  Smile\EzHelpersBundle\Services
+ * @author   Steve Cohen <cohensteve@hotmail.fr>
+ * @license  http://opensource.org/licenses/gpl-license.php GNU Public License
+ * @link     https://github.com/stevecohenfr/EzHelpersBundle Git of EzHelpersBundle
+ */
 class SmileUserService
 {
     const ADMINISTRATOR_USER_ID = 14;
 
-    private $lastUser;
+    private $_lastUser;
 
     protected $repository;
 
@@ -34,7 +49,14 @@ class SmileUserService
 
     protected $permissionResolver;
 
-    public function  __construct(Repository $repository)
+    /**
+     * SmileUserService constructor.
+     *
+     * @param Repository $repository eZPlatform API Repository
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
+     */
+    public function __construct(Repository $repository)
     {
         $this->repository = $repository;
         $this->contentService = $repository->getContentService();
@@ -44,7 +66,7 @@ class SmileUserService
         $this->searchService = $repository->getSearchService();
         $this->userService = $repository->getUserService();
         $this->permissionResolver = $repository->getPermissionResolver();
-        $this->lastUser = $this->permissionResolver->getCurrentUserReference();
+        $this->_lastUser = $this->permissionResolver->getCurrentUserReference();
     }
 
     /**************************************************************
@@ -52,7 +74,11 @@ class SmileUserService
      **************************************************************/
 
     /**
+     * Get the current user
+     *
      * @return \eZ\Publish\API\Repository\Values\User\UserReference
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
      */
     public function getCurrentUser()
     {
@@ -60,28 +86,41 @@ class SmileUserService
     }
 
     /**
+     * Save the current user in a variable to be restored later
+     *
      * @return \eZ\Publish\API\Repository\Values\User\UserReference
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
      */
     public function saveCurrentUser()
     {
-        $this->lastUser = $this->getCurrentUser();
+        $this->_lastUser = $this->getCurrentUser();
 
-        return $this->lastUser;
+        return $this->_lastUser;
     }
 
     /**
+     * Restore the last saved current user. If no current user is saved, the current user will stay
+     *
      * @return \eZ\Publish\API\Repository\Values\User\UserReference
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
      */
     public function restoreLastUser()
     {
-        $this->permissionResolver->setCurrentUserReference($this->lastUser);
+        $this->permissionResolver->setCurrentUserReference($this->_lastUser);
 
-        return $this->lastUser;
+        return $this->_lastUser;
     }
 
     /**
-     * @param User $user
+     * Login as a user
+     *
+     * @param User $user The user you want to login
+     *
      * @return User
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
      */
     public function login(User $user)
     {
@@ -92,9 +131,15 @@ class SmileUserService
     }
 
     /**
-     * @param String $login
+     * Login as a user using his login
+     *
+     * @param String $login The user login
+     *
      * @return User
+     *
      * @throws \eZ\Publish\API\Repository\Exceptions\NotFoundException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
      */
     public function loginByLogin(String $login)
     {
@@ -104,9 +149,15 @@ class SmileUserService
     }
 
     /**
-     * @param Int $id
+     * Login as a user using his id
+     *
+     * @param Int $id The user id
+     *
      * @return User
+     *
      * @throws \eZ\Publish\API\Repository\Exceptions\NotFoundException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
      */
     public function loginById(Int $id)
     {
@@ -119,7 +170,10 @@ class SmileUserService
      * Login with the default administrator id (14)
      *
      * @return User
+     *
      * @throws \eZ\Publish\API\Repository\Exceptions\NotFoundException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
      */
     public function loginAsAdministrator()
     {
@@ -127,17 +181,23 @@ class SmileUserService
     }
 
     /**
-     * @param String $login
-     * @param String $password
-     * @param String $email
-     * @param array $groupIds
-     * @param String|null $lang
+     * Create and publish a new user
+     *
+     * @param String $login    The login of the new user
+     * @param String $password The password of the new user
+     * @param String $email    The email of the new user
+     * @param array  $groupIds One or more groups to assign the new user
+     * @param String $lang     The lang you want to create your content (default: DefaultLanguageCode)
+     *
      * @return User
+     *
      * @throws \eZ\Publish\API\Repository\Exceptions\ContentFieldValidationException
      * @throws \eZ\Publish\API\Repository\Exceptions\ContentValidationException
      * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
      * @throws \eZ\Publish\API\Repository\Exceptions\NotFoundException
      * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
      */
     public function createUser(String $login, String $password, String $email, array $groupIds, String $lang = null)
     {
@@ -159,10 +219,16 @@ class SmileUserService
      **************************************************************/
 
     /**
-     * @param Int $id
+     * Get the user group by id
+     *
+     * @param Int $id The UserGroup id
+     *
      * @return \eZ\Publish\API\Repository\Values\User\UserGroup
+     *
      * @throws \eZ\Publish\API\Repository\Exceptions\NotFoundException
      * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
      */
     public function getUserGroupById(Int $id)
     {
@@ -170,14 +236,20 @@ class SmileUserService
     }
 
     /**
-     * @param Int $parentId
-     * @param String|null $lang
+     * Create and publish a new UserGroup
+     *
+     * @param Int    $parentId The location id where to create the new UserGroup
+     * @param String $lang     The lang you want to create your content (default: DefaultLanguageCode)
+     *
      * @return \eZ\Publish\API\Repository\Values\User\UserGroup
+     *
      * @throws \eZ\Publish\API\Repository\Exceptions\ContentFieldValidationException
      * @throws \eZ\Publish\API\Repository\Exceptions\ContentValidationException
      * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
      * @throws \eZ\Publish\API\Repository\Exceptions\NotFoundException
      * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
      */
     public function createUserGroup(Int $parentId, String $lang = null)
     {
@@ -191,12 +263,19 @@ class SmileUserService
     }
 
     /**
-     * @param User $user
-     * @param UserGroup $group
-     * @param bool $removeFromOtherGroups
+     * Assign a user to a group
+     *
+     * @param User      $user                  The user you want to assign
+     * @param UserGroup $group                 The group you want to assign the user
+     * @param bool      $removeFromOtherGroups If true, the user will be unassigned from all of his other groups
+     *
+     * @return void
+     *
      * @throws \eZ\Publish\API\Repository\Exceptions\BadStateException
      * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
      * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
      */
     public function assignUserToGroup(User $user, UserGroup $group, bool $removeFromOtherGroups = false)
     {
@@ -210,13 +289,20 @@ class SmileUserService
     }
 
     /**
-     * @param $user
-     * @param $group
+     * Unassign a user from a UserGroup
+     *
+     * @param User      $user  The user you want to unassign
+     * @param UserGroup $group The group you want the user to be unassigned
+     *
+     * @return void
+     *
      * @throws \eZ\Publish\API\Repository\Exceptions\BadStateException
      * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
      * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
      */
-    public function unAssignUserFromUserGroup($user, $group)
+    public function unAssignUserFromUserGroup(User $user, UserGroup $group)
     {
         $this->userService->unAssignUserFromUserGroup($user, $group);
     }

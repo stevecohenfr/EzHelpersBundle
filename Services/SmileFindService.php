@@ -1,9 +1,15 @@
 <?php
+
 /**
- * Created by PhpStorm.
- * User: stcoh
- * Date: 26/07/17
- * Time: 16:25
+ * Smile helper to find content through eZPlatform API repository
+ *
+ * PHP Version 7.1
+ *
+ * @category SmileService
+ * @package  Smile\EzHelpersBundle\Services
+ * @author   Steve Cohen <cohensteve@hotmail.fr>
+ * @license  http://opensource.org/licenses/gpl-license.php GNU Public License
+ * @link     https://github.com/stevecohenfr/EzHelpersBundle Git of EzHelpersBundle
  */
 
 namespace Smile\EzHelpersBundle\Services;
@@ -16,9 +22,17 @@ use eZ\Publish\API\Repository\Values\Content\Query\Criterion;
 use eZ\Publish\API\Repository\Values\Content\Query\Criterion\Operator;
 use eZ\Publish\Core\SignalSlot\Repository;
 
+/**
+ * Class SmileFindService
+ *
+ * @category SmileService
+ * @package  Smile\EzHelpersBundle\Services
+ * @author   Steve Cohen <cohensteve@hotmail.fr>
+ * @license  http://opensource.org/licenses/gpl-license.php GNU Public License
+ * @link     https://github.com/stevecohenfr/EzHelpersBundle Git of EzHelpersBundle
+ */
 class SmileFindService
 {
-    /** @var \eZ\Publish\Core\SignalSlot\Repository */
     protected $repository;
 
     protected $configResolver;
@@ -33,12 +47,20 @@ class SmileFindService
 
     protected $locationService;
 
-    /** @var SmileConvertService */
     protected $smileConvertService;
 
     protected $urlAliasService;
 
-    public function  __construct(Repository $repository, ConfigResolver $configResolver, SmileConvertService $smileConvertService)
+    /**
+     * SmileFindService constructor.
+     *
+     * @param Repository          $repository          The eZ Platform API Repository
+     * @param ConfigResolver      $configResolver      The ConfigResolver
+     * @param SmileConvertService $smileConvertService SmileConvertService
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
+     */
+    public function __construct(Repository $repository, ConfigResolver $configResolver, SmileConvertService $smileConvertService)
     {
         $this->repository = $repository;
         $this->configResolver = $configResolver;
@@ -52,210 +74,270 @@ class SmileFindService
     }
 
     /**
-     * Récupère tous les enfants dans l'arborescence
-     * @param  $parentLocation
-     * @param array $contentTypeIdentifier
-     * @param int $limit
-     * @param int $offset
+     * Find all children in the parent tree
+     *
+     * @param Content\Location $parentLocation        The parent location
+     * @param String           $contentTypeIdentifier The content type identifier
+     * @param int              $limit                 The limit
+     * @param int              $offset                The offset
+     *
      * @return array
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
      */
-    public function findChildrenTree(Content\Location $parentLocation, $contentTypeIdentifier = null, $limit = -1, $offset = -1)
-    {
+    public function findChildrenTree(Content\Location $parentLocation, String $contentTypeIdentifier = null,
+        $limit = -1, $offset = -1
+    ) {
         $query = new LocationQuery();
 
 
         $criteria = array(
-            new Criterion\Visibility( Criterion\Visibility::VISIBLE ),
-            new Criterion\Subtree( $parentLocation->pathString ),
-            new Criterion\LanguageCode( $this->configResolver->getParameter( 'languages' )[0] )
+            new Criterion\Visibility(Criterion\Visibility::VISIBLE),
+            new Criterion\Subtree($parentLocation->pathString),
+            new Criterion\LanguageCode($this->configResolver->getParameter('languages')[0])
         );
-        if ( $contentTypeIdentifier )
-        {
-            $criteria[] = new Criterion\ContentTypeIdentifier( $contentTypeIdentifier );
+        if ($contentTypeIdentifier ) {
+            $criteria[] = new Criterion\ContentTypeIdentifier($contentTypeIdentifier);
         }
-        if ( $limit > 0 )
-        {
+        if ($limit > 0 ) {
             $query->limit = $limit;
         }
-        if ( $offset > 0 )
-        {
+        if ($offset > 0 ) {
             $query->offset = $offset;
         }
-        $query->filter = new Criterion\LogicalAnd( $criteria );
-        $query->sortClauses = array( new Content\Query\SortClause\Location\Priority( Content\Query::SORT_ASC ) );
+        $query->filter = new Criterion\LogicalAnd($criteria);
+        $query->sortClauses = array(new Content\Query\SortClause\Location\Priority(Content\Query::SORT_ASC));
 
-        return $this->prepareResults( $this->searchService->findLocations( $query ) );
+        return $this->_prepareResults($this->searchService->findLocations($query));
     }
 
     /**
-     * Liste les enfants triés par priorités définies dans le parent
+     * Find all children in the first depth of the parent
      *
-     * @param Content\Location $parentLocation
-     * @param array|string|null $contentTypeIdentifier
-     * @param int $limit
-     * @param int $offset
-     * @return Content\Location[]
-     * @throws \eZ\Publish\API\Repository\Exceptions\NotImplementedException
+     * @param Content\Location $parentLocation        The parent location
+     * @param null             $contentTypeIdentifier The content type identifier
+     * @param int              $limit                 The limit
+     * @param int              $offset                The offset
+     * @param array            $customSortClauses     Custom sort clauses
+     * @param array            $customCriteria        Custom criteria
+     *
+     * @return array
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
      */
-    public function findChildrenList(Content\Location $parentLocation, $contentTypeIdentifier = null, $limit = 0, $offset = 0, $customSortClauses = null, $customCriteria = null)
-    {
+    public function findChildrenList(Content\Location $parentLocation, $contentTypeIdentifier = null, int $limit = 0,
+        int $offset = 0, array $customSortClauses = null, array $customCriteria = null
+    ) {
         $query = new LocationQuery();
 
         /* Criteria */
         $criteria = array(
-            new Criterion\Visibility( Criterion\Visibility::VISIBLE ),
-            new Criterion\ParentLocationId( $parentLocation->id ),
-            new Criterion\LanguageCode( $this->configResolver->getParameter( 'languages' )[0] )
+            new Criterion\Visibility(Criterion\Visibility::VISIBLE),
+            new Criterion\ParentLocationId($parentLocation->id),
+            new Criterion\LanguageCode($this->configResolver->getParameter('languages')[0])
         );
-        if ( $contentTypeIdentifier ) {
-            $criteria[] = new Criterion\ContentTypeIdentifier( $contentTypeIdentifier );
+        if ($contentTypeIdentifier ) {
+            $criteria[] = new Criterion\ContentTypeIdentifier($contentTypeIdentifier);
         }
-        if ( $customCriteria ) {
+        if ($customCriteria ) {
             if (is_array($customCriteria)) {
                 $criteria = array_merge($criteria, $customCriteria);
-            }else {
+            } else {
                 $criteria[] = $customCriteria;
             }
         }
-        $query->filter = new Criterion\LogicalAnd( $criteria );
+        $query->filter = new Criterion\LogicalAnd($criteria);
 
         /* Sort Clauses */
         $sortClauses =  array(
-            new Content\Query\SortClause\Location\Priority( Content\Query::SORT_ASC )
+            new Content\Query\SortClause\Location\Priority(Content\Query::SORT_ASC)
         );
         if ($customSortClauses) {
             if (is_array($customSortClauses)) {
                 $sortClauses = array_merge($customSortClauses, $sortClauses);
-            }else {
+            } else {
                 array_unshift($sortClauses, $customSortClauses);
             }
         }
         $query->sortClauses = $sortClauses;
 
         /* Limit and Offset */
-        if ( $limit > 0 ) {
+        if ($limit > 0 ) {
             $query->limit = $limit;
         }
-        if ( $offset > 0 ) {
+        if ($offset > 0 ) {
             $query->offset = $offset;
         }
 
-        return $this->prepareResults( $this->searchService->findLocations( $query ) );
-    }
-
-    public function countChildrenList(Content\Location $parentLocation, $contentTypeIdentifier = null)
-    {
-        $query = new LocationQuery();
-
-        $criteria = array(
-            new Criterion\Visibility( Criterion\Visibility::VISIBLE ),
-            new Criterion\ParentLocationId( $parentLocation->id ),
-            new Criterion\LanguageCode( $this->configResolver->getParameter( 'languages' )[0] )
-        );
-        if ( $contentTypeIdentifier )
-        {
-            $criteria[] = new Criterion\ContentTypeIdentifier( $contentTypeIdentifier );
-        }
-        $query->limit = 0;
-
-        $query->filter = new Criterion\LogicalAnd( $criteria );
-
-        return $this->searchService->findContent( $query )->totalCount;
-    }
-
-    public function findByLocationIds( array $LocationIds )
-    {
-        $query = new LocationQuery();
-
-        $criteria = array(
-            new Criterion\LocationId( $LocationIds ),
-            new Criterion\Visibility( Criterion\Visibility::VISIBLE ),
-            new Criterion\LanguageCode( $this->configResolver->getParameter( 'languages' )[0] )
-        );
-
-        $query->filter = new Criterion\LogicalAnd( $criteria );
-
-        $query->sortClauses = array( new Content\Query\SortClause\Location\Priority( Content\Query::SORT_ASC ) );
-
-        return $this->prepareResults( $this->searchService->findLocations( $query ) );
+        return $this->_prepareResults($this->searchService->findLocations($query));
     }
 
     /**
+     * Only count children in the first parent depth
      *
-     * Liste les enfants triés par priorités définies dans le parent en fonction du groupe de classe
+     * @param Content\Location $parentLocation        The parent location
+     * @param String           $contentTypeIdentifier The content type identifier
      *
-     * @param $parentLocation
-     * @param $classGroudId
-     * @param null $excludeContentType
+     * @return int|null
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
+     */
+    public function countChildrenList(Content\Location $parentLocation, String $contentTypeIdentifier = null)
+    {
+        $query = new LocationQuery();
+
+        $criteria = array(
+            new Criterion\Visibility(Criterion\Visibility::VISIBLE),
+            new Criterion\ParentLocationId($parentLocation->id),
+            new Criterion\LanguageCode($this->configResolver->getParameter('languages')[0])
+        );
+        if ($contentTypeIdentifier ) {
+            $criteria[] = new Criterion\ContentTypeIdentifier($contentTypeIdentifier);
+        }
+        $query->limit = 0;
+
+        $query->filter = new Criterion\LogicalAnd($criteria);
+
+        return $this->searchService->findContent($query)->totalCount;
+    }
+
+    /**
+     * Find all locations with an array of location id
+     *
+     * @param array $LocationIds All the location ids
+     * @param bool  $allowHidden If true, it will also return the hidden locations
      *
      * @return array
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
      */
-    public function findChildrenListByParentAndContentTypeGroupId(Content\Location $parentLocation, $classGroudId, $excludeContentType = null)
+    public function findByLocationIds(array $LocationIds, $allowHidden = false)
     {
+        $query = new LocationQuery();
+
+        $criteria = array(
+            new Criterion\LocationId($LocationIds),
+            new Criterion\LanguageCode($this->configResolver->getParameter('languages')[0])
+        );
+
+        if ($allowHidden == false) {
+            $criteria[] = new Criterion\Visibility(Criterion\Visibility::VISIBLE);
+        }
+
+        $query->filter = new Criterion\LogicalAnd($criteria);
+
+        $query->sortClauses = array( new Content\Query\SortClause\Location\Priority(Content\Query::SORT_ASC) );
+
+        return $this->_prepareResults($this->searchService->findLocations($query));
+    }
+
+    /**
+     * Find all locations that match a content type contained in the given ContentTypeGroupe id
+     *
+     * @param Content\Location $parentLocation     The parent location
+     * @param int              $classGroudId       The ContentTypeGroup id
+     * @param array            $excludeContentType An array containing all ContentType identifier to exclude
+     *
+     * @return array
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
+     */
+    public function findChildrenListByContentTypeGroupId(Content\Location $parentLocation, int $classGroudId,
+        array $excludeContentType = null
+    ) {
         $query = new LocationQuery();
 
         $criteria[] = new Criterion\LogicalAnd(
             array(
-                new Criterion\Visibility( Criterion\Visibility::VISIBLE ),
-                new Criterion\ParentLocationId( $parentLocation->id ),
-                new Criterion\ContentTypeGroupId( $classGroudId ),
+                new Criterion\Visibility(Criterion\Visibility::VISIBLE),
+                new Criterion\ParentLocationId($parentLocation->id),
+                new Criterion\ContentTypeGroupId($classGroudId),
             )
         );
-        if ( $excludeContentType )
-        {
+        if ($excludeContentType ) {
             $criteria[] = new Criterion\LogicalNot(
-                new Criterion\ContentTypeIdentifier( $excludeContentType )
+                new Criterion\ContentTypeIdentifier($excludeContentType)
             );
         }
 
-        $query->filter = new Criterion\LogicalAnd( $criteria );
+        $query->filter = new Criterion\LogicalAnd($criteria);
 
-        $query->sortClauses = array( new Content\Query\SortClause\Location\Priority( Content\Query::SORT_ASC ) );
+        $query->sortClauses = array(new Content\Query\SortClause\Location\Priority(Content\Query::SORT_ASC));
 
-        return $this->prepareResults( $this->searchService->findLocations( $query ) );
+        return $this->_prepareResults($this->searchService->findLocations($query));
     }
 
-    public function findReverseRelationsByContentType( $content, $contentTypeIdentifier = array() )
+    /**
+     * Find all the reverse relation locations of a content
+     *
+     * @param Content\Content $content               The content
+     * @param array           $contentTypeIdentifier An array to filter relations by ContentType
+     *
+     * @return array|null
+     *
+     * @throws NotFoundException
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
+     */
+    public function findReverseRelationsByContentType(Content\Content $content, array $contentTypeIdentifier = array())
     {
-        $reverseRelations = $this->contentService->loadReverseRelations( $content->contentInfo );
+        $reverseRelations = $this->contentService->loadReverseRelations($content->contentInfo);
         $relationsIds = array();
 
-        if ( count( $reverseRelations ) )
-        {
-            foreach ( $reverseRelations as $relation )
-            {
-                $contentInfo = $this->contentService->loadContentInfo( $relation->sourceContentInfo->id );
-                $contentType = $this->contentTypeService->loadContentType( $contentInfo->contentTypeId );
+        if (count($reverseRelations) ) {
+            foreach ($reverseRelations as $relation) {
+                $contentInfo = $this->contentService->loadContentInfo($relation->sourceContentInfo->id);
+                $contentType = $this->contentTypeService->loadContentType($contentInfo->contentTypeId);
                 $identifier = $contentType->identifier;
-                if ( empty( $contentType ) || in_array( $identifier, $contentTypeIdentifier ) )
-                {
+                if (empty($contentType) || in_array($identifier, $contentTypeIdentifier)) {
                     $relationsIds[] = $relation->sourceContentInfo->mainLocationId;
                 }
             }
             $result = $this->findByLocationIds($relationsIds);
-        } else  {
+        } else {
             $result = null;
         }
 
         return $result;
     }
 
-    public function findRelationsByContentType( $content, $contentTypeIdentifier = array() )
+    /**
+     * Find all relation of a content
+     *
+     * @param Content\Content $content               The content
+     * @param array           $contentTypeIdentifier An array to filter relations by ContentType
+     *
+     * @return array
+     *
+     * @throws NotFoundException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
+     */
+    public function findRelationsByContentType(Content\Content $content, array $contentTypeIdentifier = array())
     {
-        $relatedObjects = $this->contentService->loadRelations( $content->versionInfo );
+        $relatedObjects = $this->contentService->loadRelations($content->versionInfo);
         $relations = array();
-        if ( count( $relatedObjects ) )
-        {
-            foreach ( $relatedObjects as $relation )
-            {
-                $contentInfo = $this->contentService->loadContentInfo( $relation->destinationContentInfo->id );
-                $contentType = $this->contentTypeService->loadContentType( $contentInfo->contentTypeId );
+        if (count($relatedObjects) ) {
+            foreach ($relatedObjects as $relation) {
+                $contentInfo = $this->contentService->loadContentInfo($relation->destinationContentInfo->id);
+                $contentType = $this->contentTypeService->loadContentType($contentInfo->contentTypeId);
                 $identifier = $contentType->identifier;
-                if ( empty( $contentType ) || in_array( $identifier, $contentTypeIdentifier ) )
-                {
-                    $relation = $this->locationService->loadLocation( $relation->destinationContentInfo->mainLocationId  );
-                    if ( $relation->invisible == false )
-                    {
+                if (empty($contentType) || in_array($identifier, $contentTypeIdentifier) ) {
+                    $relation = $this->locationService->loadLocation($relation->destinationContentInfo->mainLocationId);
+                    if ($relation->invisible == false ) {
                         $relations[] = $relation;
                     }
                 }
@@ -265,68 +347,122 @@ class SmileFindService
     }
 
     /**
-     * @param Content\Content $content
-     * @param $fieldName
-     * @return Content\Content[]
+     * Return all relations of a content from a field name
+     *
+     * @param Content\Content $content   The content
+     * @param String          $fieldName The relation field name
+     *
+     * @return array
+     *
+     * @throws NotFoundException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
      */
-    public function findRelationObjectsFromField( Content\Content $content, $fieldName )
+    public function findRelationObjectsFromField(Content\Content $content, String $fieldName)
     {
-        $destinationContentIds = $content->getField( $fieldName )->value->destinationContentIds;
+        $destinationContentIds = $content->getField($fieldName)->value->destinationContentIds;
         $relatedObjects = array();
-        foreach ( $destinationContentIds as $id )
-        {
-            $relatedObjects[] = $this->contentService->loadContent( $id );
+        foreach ($destinationContentIds as $id) {
+            $relatedObjects[] = $this->contentService->loadContent($id);
         }
         return $relatedObjects;
     }
 
-    public function findFirstParentOfType( $currentLocation, $parentContentType )
+    /**
+     * Find the first parent of type matching the given ContentType identifier from the given location ancestors
+     *
+     * @param Content\Location $currentLocation   The location
+     * @param String           $parentContentType The parent ContentType identifier you are looking for
+     *
+     * @return Content\Location|null
+     *
+     * @throws NotFoundException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
+     */
+    public function findFirstParentOfType(Content\Location $currentLocation, String $parentContentType)
     {
-        $parentLocation = $this->locationService->loadLocation( $currentLocation->id );
-        $contentIdentifier = $this->contentTypeService->loadContentType( $parentLocation->contentInfo->contentTypeId )->identifier;
+        $parentLocation = $this->locationService->loadLocation($currentLocation->id);
+        $contentIdentifier = $this->contentTypeService->loadContentType(
+            $parentLocation->contentInfo->contentTypeId
+        )->identifier;
 
-        while ( $contentIdentifier !== $parentContentType && $parentLocation->id != 2 )
-        {
-            $parentLocation = $this->locationService->loadLocation( $parentLocation->parentLocationId );
-            $contentIdentifier = $this->contentTypeService->loadContentType( $parentLocation->contentInfo->contentTypeId )->identifier;
+        while ($contentIdentifier !== $parentContentType && $parentLocation->id != 2) {
+            $parentLocation = $this->locationService->loadLocation($parentLocation->parentLocationId);
+            $contentIdentifier = $this->contentTypeService->loadContentType(
+                $parentLocation->contentInfo->contentTypeId
+            )->identifier;
         }
 
-        if ( $parentLocation->id != 2 )
-        {
+        if ($parentLocation->id != 2) {
             return $parentLocation;
         }
         return null;
     }
 
-    public function findFirstParent( $currentLocation )
+    /**
+     * Get the direct parent
+     *
+     * @param Content\Location $currentLocation The location
+     *
+     * @return Content\Location
+     *
+     * @throws NotFoundException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
+     */
+    public function findFirstParent(Content\Location $currentLocation)
     {
-        $parentLocation = $this->locationService->loadLocation( $currentLocation->parentLocationId );
+        $parentLocation = $this->locationService->loadLocation($currentLocation->parentLocationId);
 
         return $parentLocation;
     }
 
-    public function findNextContent( Content\Location $currentLocation, $contentTypeIdentifier = null )
+    /**
+     * Find the next content depending on the priority
+     * <pre>
+     * Example:
+     * |- Foo (children ordered by priority)
+     *    |- Bar (priority 10)
+     *    |- Baz (priority 20)
+     * </pre>
+     * findNextContent(Bar) = Baz
+     *
+     * @param Content\Location $currentLocation       The location
+     * @param String           $contentTypeIdentifier The ContentType identifier. If the next content does not match this identifier it will try with the next
+     *
+     * @return Content\Content|null
+     *
+     * @throws NotFoundException
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
+     */
+    public function findNextContent(Content\Location $currentLocation, String $contentTypeIdentifier = null)
     {
         $query = new Content\LocationQuery();
 
         $criteria = array(
-            new Criterion\Visibility( Criterion\Visibility::VISIBLE ),
-            new Criterion\ParentLocationId( $currentLocation->parentLocationId ),
-            new Criterion\LanguageCode( $this->configResolver->getParameter( 'languages' )[0] )
+            new Criterion\Visibility(Criterion\Visibility::VISIBLE),
+            new Criterion\ParentLocationId($currentLocation->parentLocationId),
+            new Criterion\LanguageCode($this->configResolver->getParameter('languages')[0])
         );
-        if ( $contentTypeIdentifier )
-        {
-            $criteria[] = new Criterion\ContentTypeIdentifier( $contentTypeIdentifier );
+        if ($contentTypeIdentifier ) {
+            $criteria[] = new Criterion\ContentTypeIdentifier($contentTypeIdentifier);
         }
         $query->limit = 1;
 
-        $criteria[] = new Criterion\Location\Priority(Operator::GT, $currentLocation->priority );
+        $criteria[] = new Criterion\Location\Priority(Operator::GT, $currentLocation->priority);
 
-        $query->filter = new Criterion\LogicalAnd( $criteria );
+        $query->filter = new Criterion\LogicalAnd($criteria);
 
-        $query->sortClauses = array( new Content\Query\SortClause\Location\Priority(Content\Query::SORT_ASC) );
+        $query->sortClauses = array(new Content\Query\SortClause\Location\Priority(Content\Query::SORT_ASC));
 
-        $result =  $this->prepareResults( $this->searchService->findLocations( $query ) );
+        $result = $this->_prepareResults($this->searchService->findLocations($query));
         if (count($result) > 0) {
             return $this->smileConvertService->locationToContent(
                 $result[0]
@@ -335,28 +471,48 @@ class SmileFindService
         return null;
     }
 
-    public function findPreviousContent( Content\Location $currentLocation, $contentTypeIdentifier = null )
+    /**
+     * Find the previous content depending on the priority
+     * <pre>
+     * Example:
+     * |- Foo (children ordered by priority)
+     *    |- Bar (priority 10)
+     *    |- Baz (priority 20)
+     * </pre>
+     * findPreviousContent(Baz) = Bar
+     *
+     * @param Content\Location $currentLocation       The location
+     * @param String           $contentTypeIdentifier The ContentType identifier. If the next content does not match this identifier it will try with the next
+     *
+     * @return Content\Content|null
+     *
+     * @throws NotFoundException
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
+     */
+    public function findPreviousContent(Content\Location $currentLocation, String $contentTypeIdentifier = null)
     {
         $query = new Content\LocationQuery();
 
         $criteria = array(
-            new Criterion\Visibility( Criterion\Visibility::VISIBLE ),
-            new Criterion\ParentLocationId( $currentLocation->parentLocationId ),
-            new Criterion\LanguageCode( $this->configResolver->getParameter( 'languages' )[0] )
+            new Criterion\Visibility(Criterion\Visibility::VISIBLE),
+            new Criterion\ParentLocationId($currentLocation->parentLocationId),
+            new Criterion\LanguageCode($this->configResolver->getParameter('languages')[0])
         );
-        if ( $contentTypeIdentifier )
-        {
-            $criteria[] = new Criterion\ContentTypeIdentifier( $contentTypeIdentifier );
+        if ($contentTypeIdentifier ) {
+            $criteria[] = new Criterion\ContentTypeIdentifier($contentTypeIdentifier);
         }
         $query->limit = 1;
 
-        $criteria[] = new Criterion\Location\Priority(Operator::LT, $currentLocation->priority );
+        $criteria[] = new Criterion\Location\Priority(Operator::LT, $currentLocation->priority);
 
-        $query->filter = new Criterion\LogicalAnd( $criteria );
+        $query->filter = new Criterion\LogicalAnd($criteria);
 
-        $query->sortClauses = array( new Content\Query\SortClause\Location\Priority( Content\Query::SORT_DESC ) );
+        $query->sortClauses = array(new Content\Query\SortClause\Location\Priority(Content\Query::SORT_DESC));
 
-        $result = $this->prepareResults( $this->searchService->findLocations( $query ) );
+        $result = $this->_prepareResults($this->searchService->findLocations($query));
         if (count($result) > 0) {
             return $this->smileConvertService->locationToContent(
                 $result[0]
@@ -365,7 +521,32 @@ class SmileFindService
         return null;
     }
 
-    public function findIndexInParent( Content\Location $location )
+    /**
+     * /!\ WIP /!\
+     *
+     * Find the index of the content depending on the sort chooser in backoffice for the parent
+     *
+     * The index start with 0
+     * <pre>
+     * Example:
+     * |- Parent (children ordered by name)
+     *    |- Location1
+     *    |- Location2
+     *    |- Location3
+     * </pre>
+     * findIndexInParent(Location2) = 1
+     *
+     * @param Content\Location $location The location
+     *
+     * @return int|null
+     *
+     * @throws NotFoundException
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
+     */
+    public function findIndexInParent(Content\Location $location)
     {
         $content = $this->contentService->loadContent($location->contentId);
         $query = new Content\LocationQuery();
@@ -380,108 +561,91 @@ class SmileFindService
         $criterion = null;
 
         $criteria = array(
-            new Criterion\Visibility( Criterion\Visibility::VISIBLE ),
-            new Criterion\ParentLocationId( $location->parentLocationId ),
-            new Criterion\LanguageCode( $this->configResolver->getParameter( 'languages' )[0] )
+            new Criterion\Visibility(Criterion\Visibility::VISIBLE),
+            new Criterion\ParentLocationId($location->parentLocationId),
+            new Criterion\LanguageCode($this->configResolver->getParameter('languages')[0])
         );
 
         switch ($sortOrder) {
-            case Content\Location::SORT_ORDER_ASC:
-                $querySortOrder = Content\Query::SORT_ASC;
-                $fiterOperator = Operator::LT;
+        case Content\Location::SORT_ORDER_ASC:
+            $querySortOrder = Content\Query::SORT_ASC;
+            $fiterOperator = Operator::LT;
             break;
-            case Content\Location::SORT_ORDER_DESC:
-                $querySortOrder = Content\Query::SORT_DESC;
-                $fiterOperator = Operator::GT;
+        case Content\Location::SORT_ORDER_DESC:
+            $querySortOrder = Content\Query::SORT_DESC;
+            $fiterOperator = Operator::GT;
             break;
-            default:
-                $fiterOperator = Operator::LT;
+        default:
+            $fiterOperator = Operator::LT;
         }
 
         switch ($sortField) {
-            case Content\Location::SORT_FIELD_NAME:
-                $sortClass = Content\Query\SortClause\ContentName::class;
-                $criterion = new Criterion\Field('name', $fiterOperator, $content->contentInfo->name);
-                //TODO NOT WORKING
+        case Content\Location::SORT_FIELD_NAME:
+            $sortClass = Content\Query\SortClause\ContentName::class;
+            $criterion = new Criterion\Field('name', $fiterOperator, $content->contentInfo->name);
+            //TODO NOT WORKING
             break;
-            case Content\Location::SORT_FIELD_PATH:
-                $sortClass = Content\Query\SortClause\Location\Path::class;
-                //TODO
+        case Content\Location::SORT_FIELD_PATH:
+            $sortClass = Content\Query\SortClause\Location\Path::class;
+            //TODO
             break;
-            case Content\Location::SORT_FIELD_PUBLISHED:
-                $sortClass = Content\Query\SortClause\DatePublished::class;
-                $criterion = new Criterion\DateMetadata(Criterion\DateMetadata::CREATED, $fiterOperator, $content->versionInfo->creationDate->getTimestamp());
+        case Content\Location::SORT_FIELD_PUBLISHED:
+            $sortClass = Content\Query\SortClause\DatePublished::class;
+            $criterion = new Criterion\DateMetadata(
+                Criterion\DateMetadata::CREATED, $fiterOperator,
+                $content->versionInfo->creationDate->getTimestamp()
+            );
             break;
-            case Content\Location::SORT_FIELD_MODIFIED:
-                $sortClass = Content\Query\SortClause\DateModified::class;
-                $criterion = new Criterion\DateMetadata(Criterion\DateMetadata::MODIFIED, $fiterOperator, $content->versionInfo->modificationDate->getTimestamp());
+        case Content\Location::SORT_FIELD_MODIFIED:
+            $sortClass = Content\Query\SortClause\DateModified::class;
+            $criterion = new Criterion\DateMetadata(
+                Criterion\DateMetadata::MODIFIED, $fiterOperator,
+                $content->versionInfo->modificationDate->getTimestamp()
+            );
             break;
-            case Content\Location::SORT_FIELD_SECTION:
-                $sortClass = Content\Query\SortClause\SectionName::class;
-                //TODO
+        case Content\Location::SORT_FIELD_SECTION:
+            $sortClass = Content\Query\SortClause\SectionName::class;
+            //TODO
             break;
-            case Content\Location::SORT_FIELD_DEPTH:
-                $sortClass = Content\Query\SortClause\Location\Depth::class;
-                $criterion = new Criterion\Location\Depth($fiterOperator, $location->depth);
+        case Content\Location::SORT_FIELD_DEPTH:
+            $sortClass = Content\Query\SortClause\Location\Depth::class;
+            $criterion = new Criterion\Location\Depth($fiterOperator, $location->depth);
             break;
-            case Content\Location::SORT_FIELD_CLASS_IDENTIFIER:
-                //TODO
+        case Content\Location::SORT_FIELD_CLASS_IDENTIFIER:
+            //TODO
             break;
-            case Content\Location::SORT_FIELD_CLASS_NAME:
-                //TODO
+        case Content\Location::SORT_FIELD_CLASS_NAME:
+            //TODO
             break;
-            default:
-                $sortClass = Content\Query\SortClause\Location\Priority::class;
-                $criterion = new Criterion\Location\Priority($fiterOperator, $location->priority );
+        default:
+            $sortClass = Content\Query\SortClause\Location\Priority::class;
+            $criterion = new Criterion\Location\Priority($fiterOperator, $location->priority);
         }
 
         $criteria[] = $criterion;
 
-        $query->sortClauses = array( new $sortClass($querySortOrder) );
+        $query->sortClauses = array(new $sortClass($querySortOrder));
         $query->filter = new Criterion\LogicalAnd($criteria);
 
 
-        return $this->searchService->findLocations( $query )->totalCount;
-    }
-
-    public function findPathArray($location)
-    {
-        $path_array = explode( "/", $location->pathString );
-        $path_array = array_slice( $path_array, 3, count( $path_array ) - 4 );
-
-        return $path_array;
+        return $this->searchService->findLocations($query)->totalCount;
     }
 
     /**
-     * Insère les résultats dans un tableau
+     * Find a location matching the given URL (starting with a /)
      *
-     * @param $results
-     * @return array
-     */
-    private function prepareResults($results)
-    {
-        $res = array();
-        foreach ( $results->searchHits as $hit )
-        {
-            /**
-             *
-             * @var $hit \eZ\Publish\API\Repository\Values\Content\Search\SearchHit
-             */
-            $res[] = $hit->valueObject;
-        }
-
-        return $res;
-    }
-
-    /**
-     * @param $url
-     * @param null $languageCode
+     * @param String $url          The URL you want to fetch the content (example: /foo/bar/baz)
+     * @param String $languageCode The language code, if none given it will get the default language
+     *
      * @return Content\Location|null
+     *
      * @throws NotFoundException
      * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
      * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
      */
-    public function findLocationByUrl($url, $languageCode = null)
+    public function findLocationByUrl(String $url, String $languageCode = null)
     {
         try {
             $urlAlias = $this->urlAliasService->lookup($url, $languageCode);
@@ -491,7 +655,34 @@ class SmileFindService
         return $this->locationService->loadLocation($urlAlias->destination);
     }
 
-    public function findFirstValidLocationByUrl($url, $languageCode = null)
+    /**
+     * Try to get the location matching the given URL (starting with a /). If no location if found, it remove the last URL part and try again.
+     * <pre>
+     * Example:
+     * |- Foo
+     *    |- bar
+     *       |- Baz
+     *          | Qux
+     * findFirstValidLocationByUrl('/Foo/Bar/quux/quuz') = Bar
+     *
+     * Explaination:
+     * /Foo/Bar/quux/quuz = fail
+     * /Foo/Bar/quux = fail
+     * /Foo/Bar = success
+     * </pre>
+     *
+     * @param String $url          The URL you want to fetch the content (example: /foo/bar/baz)
+     * @param String $languageCode The language code, if none given it will get the default language
+     *
+     * @return Content\Location|null
+     *
+     * @throws NotFoundException
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
+     */
+    public function findFirstValidLocationByUrl(String $url, String $languageCode = null)
     {
         $urlArray = explode('/', $url);
         array_shift($urlArray); // Remove first /
@@ -501,5 +692,24 @@ class SmileFindService
             array_pop($urlArray);
         }
         return $foundLocation;
+    }
+
+    /**
+     * Transform searchHits in Location array
+     *
+     * @param Content\Search\SearchResult $results The fetch SearchResult
+     *
+     * @return array
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
+     */
+    private function _prepareResults(Content\Search\SearchResult $results)
+    {
+        $res = array();
+        foreach ($results->searchHits as $hit) {
+            $res[] = $hit->valueObject;
+        }
+
+        return $res;
     }
 }
