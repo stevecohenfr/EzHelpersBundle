@@ -92,19 +92,18 @@ class SmileFindService
     ) {
         $query = new LocationQuery();
 
-
         $criteria = array(
             new Criterion\Visibility(Criterion\Visibility::VISIBLE),
             new Criterion\Subtree($parentLocation->pathString),
             new Criterion\LanguageCode($this->configResolver->getParameter('languages')[0])
         );
-        if ($contentTypeIdentifier ) {
+        if ($contentTypeIdentifier) {
             $criteria[] = new Criterion\ContentTypeIdentifier($contentTypeIdentifier);
         }
-        if ($limit > 0 ) {
+        if ($limit > 0) {
             $query->limit = $limit;
         }
-        if ($offset > 0 ) {
+        if ($offset > 0) {
             $query->offset = $offset;
         }
         $query->filter = new Criterion\LogicalAnd($criteria);
@@ -130,7 +129,7 @@ class SmileFindService
      * @author Steve Cohen <cohensteve@hotmail.fr>
      */
     public function findChildrenList(Content\Location $parentLocation, $contentTypeIdentifier = null, int $limit = 0,
-        int $offset = 0, array $customSortClauses = null, array $customCriteria = null
+        int $offset = 0, $customSortClauses = null, $customCriteria = null
     ) {
         $query = new LocationQuery();
 
@@ -234,7 +233,7 @@ class SmileFindService
 
         $query->filter = new Criterion\LogicalAnd($criteria);
 
-        $query->sortClauses = array( new Content\Query\SortClause\Location\Priority(Content\Query::SORT_ASC) );
+        $query->sortClauses = array(new Content\Query\SortClause\Location\Priority(Content\Query::SORT_ASC));
 
         return $this->_prepareResults($this->searchService->findLocations($query));
     }
@@ -307,7 +306,7 @@ class SmileFindService
             }
             $result = $this->findByLocationIds($relationsIds);
         } else {
-            $result = null;
+            $result = [];
         }
 
         return $result;
@@ -367,6 +366,25 @@ class SmileFindService
             $relatedObjects[] = $this->contentService->loadContent($id);
         }
         return $relatedObjects;
+    }
+
+    /**
+     * Return the content in the relation from the field name
+     *
+     * @param Content\Content $content   The content
+     * @param String          $fieldName The relation field name
+     *
+     * @return Content\Content
+     *
+     * @throws NotFoundException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     */
+    public function findRelationObjectFromField(Content\Content $content, String $fieldName)
+    {
+        $destinationContentId = $content->getField($fieldName)->value->destinationContentId;
+        $relatedObject = $this->contentService->loadContent($destinationContentId);
+
+        return $relatedObject;
     }
 
     /**
@@ -688,10 +706,70 @@ class SmileFindService
         array_shift($urlArray); // Remove first /
         $foundLocation = null;
         while ($foundLocation == null && count($urlArray) > 0) {
-            $foundLocation = $this->findLocationByUrl(implode('/', $urlArray), $languageCode);
+            $foundLocation = $this->findLocationByUrl('/' . implode('/', $urlArray), $languageCode);
             array_pop($urlArray);
         }
         return $foundLocation;
+    }
+
+    /**
+     * Find a child with its name in first depth
+     *
+     * @param Content\Location $parentLocation The parent location
+     * @param String           $name           The name of the location you are looking for
+     *
+     * @return array An array with one or more location (if multiple locations with the same name)
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     */
+    public function findChildByNameInList(Content\Location $parentLocation, String $name)
+    {
+        $query = new LocationQuery();
+
+        $query->filter = new Criterion\LogicalAnd(
+            array(
+                new Criterion\ParentLocationId($parentLocation->id),
+                new Criterion\Field('name', Operator::EQ, $name),
+            )
+        );
+
+        return $this->_prepareResults($this->searchService->findLocations($query));
+    }
+
+    /**
+     * Find a child with its name in the subtree
+     *
+     * @param Content\Location $parentLocation The parent location of the subtree
+     * @param String           $name           The name of the location you are looking for
+     *
+     * @return array An array with one or more location (if multiple locations with the same name)
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     */
+    public function findChildByNameInSubTree(Content\Location $parentLocation, String $name)
+    {
+        $query = new LocationQuery();
+
+        $query->filter = new Criterion\LogicalAnd(
+            array(
+                new Criterion\Subtree($parentLocation->pathString),
+                new Criterion\Field('name', Operator::EQ, $name),
+            )
+        );
+
+        return $this->_prepareResults($this->searchService->findLocations($query));
+    }
+
+    /**
+     * Get the root location of the current siteaccess depending on the siteaccess configuration in content.tree_root.location_id
+     *
+     * @return Content\Location
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     */
+    public function findRootLocationOfCurrentSiteaccess()
+    {
+        $locationid =  $this->configResolver->getParameter( 'content.tree_root.location_id' );
+
+        return $this->findByLocationIds(array($locationid))[0];
     }
 
     /**

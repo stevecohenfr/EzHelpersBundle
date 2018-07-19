@@ -16,6 +16,7 @@ namespace Smile\EzHelpersBundle\Services;
 
 use eZ\Publish\API\Repository\Values\Content\Content;
 use eZ\Publish\API\Repository\Values\Content\Location;
+use eZ\Publish\Core\Repository\Values\User\User;
 use eZ\Publish\Core\SignalSlot\Repository;
 
 /**
@@ -101,10 +102,11 @@ class SmileContentService
         $contentType = $this->contentTypeService->loadContentTypeByIdentifier($contentTypeidentifier);
         $contentCreateStruct = $this->contentService->newContentCreateStruct($contentType, $lang);
 
-        $fields = $contentType->fieldDefinitions;
+        $providedFields = array_keys($fieldValues);
+        $fields = $contentType->getFieldDefinitions();
         foreach ($fields as $field) {
             $fieldIdentifier = $field->identifier;
-            if (in_array($fieldIdentifier, $fieldValues)) {
+            if (in_array($fieldIdentifier, $providedFields)) {
                 $contentCreateStruct->setField($fieldIdentifier, $fieldValues[$fieldIdentifier]);
             }
         }
@@ -123,7 +125,11 @@ class SmileContentService
     /**
      * Get the path array (array of location ids) of a location
      *
-     * @param  Location $location
+     * @deprecated You can find the path array in location->path
+     *
+     * @see Location::$path
+     *
+     * @param  Location $location The location you whant the path array
      *
      * @return array
      *
@@ -135,5 +141,28 @@ class SmileContentService
         $path_array = array_slice($path_array, 3, count($path_array) - 4);
 
         return $path_array;
+    }
+
+    /**
+     * Add common relations to the content (without field)
+     *
+     * @param Content $content   The content
+     * @param array   $relations One or more relations to add to the content
+     * @param User    $creator   Used as creator of the draft if given - otherwise uses current-user
+     *
+     * @return Content Return the new version of content with the relations
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\BadStateException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     */
+    public function addRelationToContent(Content $content, array $relations, User $creator = null)
+    {
+        $draft = $this->contentService->createContentDraft($content->getVersionInfo()->getContentInfo(), null, $creator);
+        if (count($relations) > 0) {
+            foreach ($relations as $relation) {
+                $this->contentService->addRelation($draft->getVersionInfo(), $relation->getVersionInfo()->getContentInfo());
+            }
+        }
+        return $this->contentService->publishVersion($draft->getVersionInfo());
     }
 }

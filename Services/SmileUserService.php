@@ -14,9 +14,14 @@
 
 namespace Smile\EzHelpersBundle\Services;
 
+use eZ\Publish\API\Repository\Values\Content\Content;
+use eZ\Publish\API\Repository\Values\Content\Location;
+use eZ\Publish\API\Repository\Values\User\Limitation\SubtreeLimitation;
+use eZ\Publish\API\Repository\Values\User\Role;
 use eZ\Publish\API\Repository\Values\User\User;
 use eZ\Publish\API\Repository\Values\User\UserGroup;
 use eZ\Publish\Core\SignalSlot\Repository;
+use eZ\Publish\API\Repository\Values\User\Limitation\RoleLimitation;
 
 /**
  * Class SmileUserService
@@ -49,6 +54,8 @@ class SmileUserService
 
     protected $permissionResolver;
 
+    protected $roleService;
+
     /**
      * SmileUserService constructor.
      *
@@ -66,6 +73,7 @@ class SmileUserService
         $this->searchService = $repository->getSearchService();
         $this->userService = $repository->getUserService();
         $this->permissionResolver = $repository->getPermissionResolver();
+        $this->roleService = $repository->getRoleService();
         $this->_lastUser = $this->permissionResolver->getCurrentUserReference();
     }
 
@@ -126,6 +134,7 @@ class SmileUserService
     {
         $this->saveCurrentUser();
         $this->permissionResolver->setCurrentUserReference($user);
+        $this->repository->setCurrentUser($user);
 
         return $user;
     }
@@ -133,7 +142,7 @@ class SmileUserService
     /**
      * Login as a user using his login
      *
-     * @param String $login The user login
+     * @param String $username The user login
      *
      * @return User
      *
@@ -141,9 +150,9 @@ class SmileUserService
      *
      * @author Steve Cohen <cohensteve@hotmail.fr>
      */
-    public function loginByLogin(String $login)
+    public function loginByUsername(String $username)
     {
-        $user = $this->userService->loadUserByLogin($login);
+        $user = $this->userService->loadUserByLogin($username);
 
         return $this->login($user);
     }
@@ -214,6 +223,22 @@ class SmileUserService
         return $user;
     }
 
+    /**
+     * Convert a content to user (works if the content IS a user)
+     * You can use it to get a user from object relation(s)
+     *
+     * @param Content $content The content that is a user
+     *
+     * @return User
+     * @throws \eZ\Publish\API\Repository\Exceptions\NotFoundException
+     */
+    public function contentToUser(Content $content)
+    {
+        $user = $this->userService->loadUser($content->id);
+
+        return $user;
+    }
+
     /**************************************************************
      * *********************** User Groups ************************
      **************************************************************/
@@ -221,7 +246,7 @@ class SmileUserService
     /**
      * Get the user group by id
      *
-     * @param Int $id The UserGroup id
+     * @param Int $id The UserGroup id (content id)
      *
      * @return \eZ\Publish\API\Repository\Values\User\UserGroup
      *
@@ -238,8 +263,10 @@ class SmileUserService
     /**
      * Create and publish a new UserGroup
      *
-     * @param Int    $parentId The location id where to create the new UserGroup
-     * @param String $lang     The lang you want to create your content (default: DefaultLanguageCode)
+     * @param Int    $parentGroupId The content id of the parent UserGroup
+     * @param String $lang          The lang you want to create your content (default: DefaultLanguageCode)
+     * @param String $name          The UserGroup name
+     * @param String $description   The optional UserGroup description
      *
      * @return \eZ\Publish\API\Repository\Values\User\UserGroup
      *
@@ -251,13 +278,15 @@ class SmileUserService
      *
      * @author Steve Cohen <cohensteve@hotmail.fr>
      */
-    public function createUserGroup(Int $parentId, String $lang = null)
+    public function createUserGroup(Int $parentGroupId, String $name, String $description = "", String $lang = null)
     {
         if ($lang == null) {
             $lang = $this->repository->getContentLanguageService()->getDefaultLanguageCode();
         }
         $userGroupCreateStruct = $this->userService->newUserGroupCreateStruct($lang);
-        $userGroup = $this->userService->createUserGroup($userGroupCreateStruct, $this->getUserGroupById($parentId));
+        $userGroupCreateStruct->setField('name', $name);
+        $userGroupCreateStruct->setField('description', $description);
+        $userGroup = $this->userService->createUserGroup($userGroupCreateStruct, $this->getUserGroupById($parentGroupId));
 
         return $userGroup;
     }
@@ -280,10 +309,7 @@ class SmileUserService
     public function assignUserToGroup(User $user, UserGroup $group, bool $removeFromOtherGroups = false)
     {
         if ($removeFromOtherGroups == true) {
-            $userGroups = $this->userService->loadUserGroupsOfUser($user, 0, 1000);
-            foreach ($userGroups as $userGroup) {
-                $this->unAssignUserFromUserGroup($user, $userGroup);
-            }
+            $this->unAssignUserFromAllUserGroups($user);
         }
         $this->userService->assignUserToUserGroup($user, $group);
     }
@@ -305,5 +331,86 @@ class SmileUserService
     public function unAssignUserFromUserGroup(User $user, UserGroup $group)
     {
         $this->userService->unAssignUserFromUserGroup($user, $group);
+    }
+
+    /**
+     * Unassign the user from all his UserGroups
+     *
+     * @param User $user The user you want to unassign
+     *
+     * @return int The number of groups user has been unassigned
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\BadStateException
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     */
+    public function unAssignUserFromAllUserGroups(User $user)
+    {
+        $userGroups = $this->userService->loadUserGroupsOfUser($user, 0, 1000);
+        foreach ($userGroups as $userGroup) {
+            $this->unAssignUserFromUserGroup($user, $userGroup);
+        }
+
+        return count($userGroups);
+    }
+
+    /**
+     * Unassign all users from the given group
+     *
+     * @param UserGroup $group The group you want to unassign all users
+     *
+     * @return int The number of users unassigned
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\BadStateException
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     */
+    public function unAssignAllUsersFromUserGroup(UserGroup $group)
+    {
+        $users = $this->userService->loadUsersOfUserGroup($group);
+        foreach ($users as $user) {
+            $this->unAssignUserFromUserGroup($user, $group);
+        }
+
+        return count($users);
+    }
+
+    /**
+     * Assign a Role to a UserGroup with a limitation on a subtree
+     *
+     * @param Role      $role The role to assign
+     * @param UserGroup $group The group to assign the role
+     * @param Location  $treeRoot The subtree location root for the limitation
+     *
+     * @return void
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     * @throws \eZ\Publish\API\Repository\Exceptions\LimitationValidationException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     */
+    public function assignRoleToUserGroupLimitedBySubtree(Role $role, UserGroup $group, Location $treeRoot)
+    {
+        $limitations = array();
+        $subtreeLimitation = new SubtreeLimitation();
+        $subtreeLimitation->limitationValues[] = $treeRoot->pathString;
+        $limitations[] = $subtreeLimitation;
+        $this->roleService->assignRoleToUserGroup($role, $group, $subtreeLimitation);
+    }
+
+    /**
+     * Get a role by id
+     *
+     * @param int $id The role id
+     *
+     * @return Role
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\NotFoundException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     */
+    public function getRoleById(int $id)
+    {
+        $role = $this->roleService->loadRole($id);
+
+        return $role;
     }
 }

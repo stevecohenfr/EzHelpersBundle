@@ -142,4 +142,68 @@ class SmileConvertService
         return $arrayByIdentifierKeys;
     }
 
+    /**
+     * Convert a legacy object to symfony content
+     *
+     * @param \eZContentObject $object The legacy object to convert
+     *
+     * @return Content
+     * @throws \eZ\Publish\API\Repository\Exceptions\NotFoundException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     */
+    public function legacyObjectToContent(\eZContentObject $object)
+    {
+        $content = $this->contentService->loadContent($object->ID);
+
+        return $content;
+    }
+
+    /**
+     * Get the main location from legacy object
+     *
+     * @param \eZContentObject $object The legacy object
+     *
+     * @return Location
+     * @throws \eZ\Publish\API\Repository\Exceptions\NotFoundException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     */
+    public function legacyObjectToMainLocation(\eZContentObject $object)
+    {
+        $location = $this->locationService->loadLocation($object->mainNodeID());
+
+        return $location;
+    }
+
+    /**
+     * Convert a legacy node to symfony location
+     *
+     * @param \eZContentObjectTreeNode $node The legacy node
+     *
+     * @return Location
+     * @throws \eZ\Publish\API\Repository\Exceptions\NotFoundException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     */
+    public function legacyNodeToLocation(\eZContentObjectTreeNode $node)
+    {
+        $location = $this->locationService->loadLocation($node->attribute( 'node_id' ));
+
+        return $location;
+    }
+
+    /**
+     * Get the symfony content from a legacy node
+     *
+     * @param \eZContentObjectTreeNode $node The legacy node
+     *
+     * @return Content
+     * @throws \eZ\Publish\API\Repository\Exceptions\NotFoundException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     */
+    public function legacyNodeToContent(\eZContentObjectTreeNode $node)
+    {
+        $content = $this->contentService->loadContent($node->attribute('contentobject_id'));
+
+        return $content;
+    }
+
 }
