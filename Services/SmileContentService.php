@@ -183,7 +183,7 @@ class SmileContentService
         $fieldsArray = array();
         $fields = $content->getFields();
         foreach ($fields as $field) {
-            $fieldsArray[$field->fieldDefIdentifier] = $content->getFieldValue($field->fieldDefIdentifier, $lang);
+            $fieldsArray[$field->fieldDefIdentifier] = $content->getFieldValue($field->fieldDefIdentifier, $lang = null);
         }
 
         return $fieldsArray;
