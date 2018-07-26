@@ -165,4 +165,27 @@ class SmileContentService
         }
         return $this->contentService->publishVersion($draft->getVersionInfo());
     }
+
+    /**
+     * Get an array of all fields indexed by fieldDefIdentifier
+     *
+     * @param Content $content     The content to extract the fields
+     * @param array $ignoredFields An array of fieldDefIdentifier you don't want to extract
+     * @param string  $lang        The lang you want to create your content (default: DefaultLanguageCode)
+     *
+     * @return array
+     */
+    public function extractContentFields(Content $content, array $ignoredFields = array(), string $lang)
+    {
+        if ($lang == null) {
+            $lang = $this->repository->getContentLanguageService()->getDefaultLanguageCode();
+        }
+        $fieldsArray = array();
+        $fields = $content->getFields();
+        foreach ($fields as $field) {
+            $fieldsArray[$field->fieldDefIdentifier] = $content->getFieldValue($field->fieldDefIdentifier, $lang);
+        }
+
+        return $fieldsArray;
+    }
 }
