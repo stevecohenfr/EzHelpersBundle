@@ -14,6 +14,7 @@
 
 namespace Smile\EzHelpersBundle\Services;
 
+use eZ\Publish\API\Repository\ContentTypeService;
 use eZ\Publish\API\Repository\Values\Content\Content;
 use eZ\Publish\API\Repository\Values\Content\Location;
 use eZ\Publish\Core\Repository\Values\User\User;
@@ -42,14 +43,17 @@ class SmileContentService
 
     protected $searchService;
 
+    protected $smileFindService;
+
     /**
      * SmileContentService constructor.
      *
-     * @param Repository $repository eZPlatform API Repository
+     * @param Repository       $repository       eZPlatform API Repository
+     * @param SmileFindService $smileFindService Smile Find Service
      *
      * @author Steve Cohen <cohensteve@hotmail.fr>
      */
-    public function __construct(Repository $repository)
+    public function __construct(Repository $repository, SmileFindService $smileFindService)
     {
         $this->repository = $repository;
         $this->contentService = $repository->getContentService();
@@ -57,6 +61,7 @@ class SmileContentService
         $this->contentTypeService = $repository->getContentTypeService();
         $this->fieldTypeService = $repository->getFieldTypeService();
         $this->searchService = $repository->getSearchService();
+        $this->smileFindService = $smileFindService;
     }
 
     /**
@@ -67,6 +72,7 @@ class SmileContentService
      * @return string
      *
      * @throws \eZ\Publish\API\Repository\Exceptions\NotFoundException
+     *
      * @author Steve Cohen <cohensteve@hotmail.fr>
      */
     public function getClassIdentifier(Content $content)
@@ -154,6 +160,8 @@ class SmileContentService
      *
      * @throws \eZ\Publish\API\Repository\Exceptions\BadStateException
      * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
      */
     public function addRelationToContent(Content $content, array $relations, User $creator = null)
     {
@@ -169,21 +177,74 @@ class SmileContentService
     /**
      * Get an array of all fields indexed by fieldDefIdentifier
      *
-     * @param Content $content     The content to extract the fields
-     * @param array $ignoredFields An array of fieldDefIdentifier you don't want to extract
-     * @param string  $lang        The lang you want to create your content (default: DefaultLanguageCode)
+     * @param Content|User $content       The content to extract the fields
+     * @param boolean      $useFieldName  Use the field name instead of fieldDefIdentifier
+     * @param array        $ignoredFields An array of fieldDefIdentifier you don't want to extract
+     * @param string       $lang          The lang you want to create your content (default: DefaultLanguageCode)
      *
      * @return array
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\NotFoundException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     *
+     * @author Steve Cohen <cohensteve@hotmail.fr>
      */
-    public function extractContentFields(Content $content, array $ignoredFields = array(), string $lang)
+    public function extractContentFields($content, $useFieldName = false, array $ignoredFields = array(), string $lang = null)
     {
         if ($lang == null) {
             $lang = $this->repository->getContentLanguageService()->getDefaultLanguageCode();
         }
+        /** @var ContentTypeService $contentTypeService */
+        $contentTypeService = $this->container->get(ContentTypeService::class);
+        $contentType = $contentTypeService->loadContentType($content->contentInfo->contentTypeId);
         $fieldsArray = array();
         $fields = $content->getFields();
         foreach ($fields as $field) {
-            $fieldsArray[$field->fieldDefIdentifier] = $content->getFieldValue($field->fieldDefIdentifier, $lang = null);
+            $value = $content->getFieldValue($field->fieldDefIdentifier, $lang);
+            switch($field->fieldTypeIdentifier) {
+                case 'ezselection':
+                    $values = array();
+                    $options = $contentType->getFieldDefinition($field->fieldDefIdentifier)->getFieldSettings()['options'];
+                    foreach($content->getFieldValue($field->fieldDefIdentifier, $lang)->selection as $selection) {
+                        $values[] = $options[$selection];
+                    }
+                    $value = implode(', ', $values);
+                    break;
+                case 'ezobjectrelationlist':
+                    $values = array();
+                    $relations = $this->smileFindService->findRelationObjectsFromField($content, $field->fieldDefIdentifier);
+                    /** @var Content $relation */
+                    foreach ($relations as $relation) {
+                        $values[] = $relation->getName($lang);
+                    }
+                    $value = implode(", ", $values);
+                    break;
+                case 'ezboolean':
+                    $value = $value->__toString() === "1" ? "✔" : "✕";
+                    break;
+                case 'ezdate':
+                    $value = $value->date->format("d/m/Y");
+                    break;
+                //TODO Add others fieldTypes here
+                default:
+                    $value = $value->__toString();
+            }
+            if (!in_array($field->fieldDefIdentifier, $ignoredFields)) {
+                $fieldsArray[
+                $useFieldName ?
+                    $contentType->getFieldDefinition($field->fieldDefIdentifier)->getName($lang) :
+                    $field->fieldDefIdentifier
+                ] = $value;
+            }
+        }
+        var_dump($fieldsArray);
+        if ($content instanceof User) {
+            if (!in_array('account[login]', $ignoredFields)) {
+                $fieldsArray[$useFieldName ? 'Login' : 'account[login]'] = $content->login;
+            }
+            if (!in_array('account[email]', $ignoredFields)) {
+                $fieldsArray[$useFieldName ? 'Email' : 'account[email]'] = $content->email;
+            }
         }
 
         return $fieldsArray;

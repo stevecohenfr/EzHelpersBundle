@@ -11,7 +11,7 @@ services:
 
     smile.content:
         class: '%smile.content.class%'
-        arguments: ["@ezpublish.api.repository"]
+        arguments: ["@ezpublish.api.repository", "@smile.find"]
 
     smile.convert:
         class: '%smile.convert.class%'
