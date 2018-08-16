@@ -201,34 +201,36 @@ class SmileContentService
         $fields = $content->getFields();
         foreach ($fields as $field) {
             $value = $content->getFieldValue($field->fieldDefIdentifier, $lang);
-            switch($field->fieldTypeIdentifier) {
-                case 'ezselection':
-                    $values = array();
-                    $options = $contentType->getFieldDefinition($field->fieldDefIdentifier)->getFieldSettings()['options'];
-                    foreach($content->getFieldValue($field->fieldDefIdentifier, $lang)->selection as $selection) {
-                        $values[] = $options[$selection];
-                    }
-                    $value = implode(', ', $values);
-                    break;
-                case 'ezobjectrelationlist':
-                    $values = array();
-                    $relations = $this->smileFindService->findRelationObjectsFromField($content, $field->fieldDefIdentifier);
-                    /** @var Content $relation */
-                    foreach ($relations as $relation) {
-                        $values[] = $relation->getName($lang);
-                    }
-                    $value = implode(", ", $values);
-                    break;
-                case 'ezboolean':
-                    $value = $value->__toString() === "1" ? "✔" : "✕";
-                    break;
-                case 'ezdate':
-                    $value = $value->date->format("d/m/Y");
-                    break;
-                //TODO Add others fieldTypes here
-                default:
-                    $value = $value->__toString();
+            if ($value != null) {
+                switch($field->fieldTypeIdentifier) {
+                    case 'ezselection':
+                        $values = array();
+                        $options = $contentType->getFieldDefinition($field->fieldDefIdentifier)->getFieldSettings()['options'];
+                        foreach($content->getFieldValue($field->fieldDefIdentifier, $lang)->selection as $selection) {
+                            $values[] = $options[$selection];
+                        }
+                        $value = implode(', ', $values);
+                        break;
+                    case 'ezobjectrelationlist':
+                        $values = array();
+                        $relations = $this->getContentOfRelations($content, $field->fieldDefIdentifier, true, false);
+                        /** @var Content $relation */
+                        foreach ($relations as $relation) {
+                            $values[] = $relation->getName($lang);
+                        }
+                        $value = implode(", ", $values);
+                        break;
+                    case 'ezboolean':
+                        $value = $value->__toString() === "1" ? "✔" : "✕";
+                        break;
+                    case 'ezdate':
+                        $value = $value->date ? $value->date->format("d/m/Y") : null;
+                        break;
+                    default:
+                        $value = $value->__toString();
+                }
             }
+
             if (!in_array($field->fieldDefIdentifier, $ignoredFields)) {
                 $fieldsArray[
                 $useFieldName ?
@@ -237,7 +239,6 @@ class SmileContentService
                 ] = $value;
             }
         }
-        var_dump($fieldsArray);
         if ($content instanceof User) {
             if (!in_array('account[login]', $ignoredFields)) {
                 $fieldsArray[$useFieldName ? 'Login' : 'account[login]'] = $content->login;
