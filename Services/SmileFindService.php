@@ -80,6 +80,8 @@ class SmileFindService
      * @param String           $contentTypeIdentifier The content type identifier
      * @param int              $limit                 The limit
      * @param int              $offset                The offset
+     * @param array            $customSortClauses     Custom sort clauses
+     * @param array            $customCriteria        Custom criteria
      *
      * @return array
      *
@@ -87,8 +89,8 @@ class SmileFindService
      *
      * @author Steve Cohen <cohensteve@hotmail.fr>
      */
-    public function findChildrenTree(Content\Location $parentLocation, String $contentTypeIdentifier = null,
-        $limit = -1, $offset = -1
+    public function findChildrenTree(Content\Location $parentLocation, $contentTypeIdentifier = null,
+        $limit = 0, $offset = 0,  $customSortClauses = null, $customCriteria = null
     ) {
         $query = new LocationQuery();
 
@@ -100,14 +102,35 @@ class SmileFindService
         if ($contentTypeIdentifier) {
             $criteria[] = new Criterion\ContentTypeIdentifier($contentTypeIdentifier);
         }
+        if ($customCriteria ) {
+            if (is_array($customCriteria)) {
+                $criteria = array_merge($criteria, $customCriteria);
+            } else {
+                $criteria[] = $customCriteria;
+            }
+        }
+        $query->filter = new Criterion\LogicalAnd($criteria);
+
+        /* Sort Clauses */
+        $sortClauses = array(
+            new Content\Query\SortClause\Location\Priority(Content\Query::SORT_ASC)
+        );
+        if ($customSortClauses) {
+            if (is_array($customSortClauses)) {
+                $sortClauses = array_merge($customSortClauses, $sortClauses);
+            } else {
+                array_unshift($sortClauses, $customSortClauses);
+            }
+        }
+        $query->sortClauses = $sortClauses;
+
+        /* Limit and Offset */
         if ($limit > 0) {
             $query->limit = $limit;
         }
         if ($offset > 0) {
             $query->offset = $offset;
         }
-        $query->filter = new Criterion\LogicalAnd($criteria);
-        $query->sortClauses = array(new Content\Query\SortClause\Location\Priority(Content\Query::SORT_ASC));
 
         return $this->_prepareResults($this->searchService->findLocations($query));
     }
@@ -128,8 +151,8 @@ class SmileFindService
      *
      * @author Steve Cohen <cohensteve@hotmail.fr>
      */
-    public function findChildrenList(Content\Location $parentLocation, $contentTypeIdentifier = null, int $limit = 0,
-        int $offset = 0, $customSortClauses = null, $customCriteria = null
+    public function findChildrenList(Content\Location $parentLocation, $contentTypeIdentifier = null, $limit = 0,
+         $offset = 0, $customSortClauses = null, $customCriteria = null
     ) {
         $query = new LocationQuery();
 
