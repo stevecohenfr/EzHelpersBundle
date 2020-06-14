@@ -8,25 +8,40 @@ parameters:
 services:
     smile.find:
         class: '%smile.find.class%'
-        arguments: ["@ezpublish.api.repository", "@ezpublish.config.resolver.core", "@smile.convert"]
+        arguments:
+            - "@ezpublish.api.repository"
+            - "@ezpublish.config.resolver.core"
+            - "@smile.convert"
         lazy: true
 
     smile.content:
         class: '%smile.content.class%'
-        arguments: ["@ezpublish.api.repository", "@smile.find"]
+        arguments:
+            - "@ezpublish.api.repository"
+            - "@smile.find"
         lazy: true
 
     smile.convert:
         class: '%smile.convert.class%'
-        arguments: ["@ezpublish.api.repository", "@smile.content"]
+        arguments:
+            - "@ezpublish.api.repository"
+            - "@smile.content"
         lazy: true
 
     smile.user:
         class: '%smile.user.class%'
-        arguments: ["@ezpublish.api.repository"]
+        arguments:
+            - "@ezpublish.api.repository"
+            - "@security.token_storage"
+            - "@session"
+            - "$security.token_interval_spec$"
         lazy: true
 
     smile.services:
         class: '%smile.services.class%'
-        arguments: ["@smile.content", "@smile.convert", "@smile.user", "@smile.find"]
+        arguments:
+            - "@smile.content"
+            - "@smile.convert"
+            - "@smile.user"
+            - "@smile.find"
         lazy: true

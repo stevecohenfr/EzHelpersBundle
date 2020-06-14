@@ -86,7 +86,7 @@ class SmileConvertService
      *
      * @param array $locationArray The location array you want the contents
      *
-     * @return array
+     * @return Content[]
      *
      * @throws \eZ\Publish\API\Repository\Exceptions\NotFoundException
      * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException

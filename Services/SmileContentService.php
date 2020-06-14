@@ -15,9 +15,10 @@
 namespace Smile\EzHelpersBundle\Services;
 
 use eZ\Publish\API\Repository\ContentTypeService;
+use eZ\Publish\API\Repository\Exceptions\NotFoundException;
 use eZ\Publish\API\Repository\Values\Content\Content;
 use eZ\Publish\API\Repository\Values\Content\Location;
-use eZ\Publish\Core\Repository\Values\User\User;
+use eZ\Publish\API\Repository\Values\User\User;
 use eZ\Publish\Core\SignalSlot\Repository;
 
 /**
@@ -86,7 +87,7 @@ class SmileContentService
      *
      * @param String $contentTypeidentifier Class identifier that you want to create a content
      * @param array  $parentLocationIds     One or more parent location id where you want to create your object
-     * @param array  $fieldValues           An associative array to fill the field array('field_name' => "Field Value")
+     * @param array  $cumstomFields         An associative array to fill the field array('field_name' => "Field Value")
      * @param String $lang                  The lang you want to create your content (default: DefaultLanguageCode)
      *
      * @return \eZ\Publish\API\Repository\Values\Content\Content
@@ -100,7 +101,7 @@ class SmileContentService
      *
      * @author Steve Cohen <cohensteve@hotmail.fr>
      */
-    public function createContent($contentTypeidentifier, array $parentLocationIds, $fieldValues = array(), $lang = null)
+    public function createContent($contentTypeidentifier, array $parentLocationIds, $cumstomFields = array(), $lang = null)
     {
         if ($lang == null) {
             $lang = $this->repository->getContentLanguageService()->getDefaultLanguageCode();
@@ -108,12 +109,12 @@ class SmileContentService
         $contentType = $this->contentTypeService->loadContentTypeByIdentifier($contentTypeidentifier);
         $contentCreateStruct = $this->contentService->newContentCreateStruct($contentType, $lang);
 
-        $providedFields = array_keys($fieldValues);
+        $providedFields = array_keys($cumstomFields);
         $fields = $contentType->getFieldDefinitions();
         foreach ($fields as $field) {
             $fieldIdentifier = $field->identifier;
             if (in_array($fieldIdentifier, $providedFields)) {
-                $contentCreateStruct->setField($fieldIdentifier, $fieldValues[$fieldIdentifier]);
+                $contentCreateStruct->setField($fieldIdentifier, $cumstomFields[$fieldIdentifier]);
             }
         }
 
@@ -175,12 +176,34 @@ class SmileContentService
     }
 
     /**
+     * Extract selection values labels
+     *
+     * @param Content     $content
+     * @param string      $fieldIdentifier
+     * @param string|null $lang
+     *
+     * @return array
+     * @throws NotFoundException
+     */
+    public function getSelectionValue(Content $content, string $fieldIdentifier, string $lang = null) {
+        $contentType = $this->contentTypeService->loadContentType($content->contentInfo->contentTypeId);
+
+        $values = array();
+        $options = $contentType->getFieldDefinition($fieldIdentifier)->getFieldSettings()['options'];
+        foreach($content->getFieldValue($fieldIdentifier, $lang)->selection as $selection) {
+            $values[] = $options[$selection];
+        }
+        return $values;
+    }
+
+    /**
      * Get an array of all fields indexed by fieldDefIdentifier
      *
      * @param Content|User $content       The content to extract the fields
      * @param boolean      $useFieldName  Use the field name instead of fieldDefIdentifier
      * @param array        $ignoredFields An array of fieldDefIdentifier you don't want to extract
      * @param string       $lang          The lang you want to create your content (default: DefaultLanguageCode)
+     * @param int          $depth         The depth to load sub contents in ezobjectrelation and ezobjectrelationlist
      *
      * @return array
      *
@@ -189,14 +212,12 @@ class SmileContentService
      *
      * @author Steve Cohen <cohensteve@hotmail.fr>
      */
-    public function extractContentFields($content, $useFieldName = false, array $ignoredFields = array(), string $lang = null)
+    public function extractContentFields($content, $useFieldName = false, array $ignoredFields = array(), string $lang = null, $depth = 0)
     {
         if ($lang == null) {
             $lang = $this->repository->getContentLanguageService()->getDefaultLanguageCode();
         }
-        /** @var ContentTypeService $contentTypeService */
-        $contentTypeService = $this->container->get(ContentTypeService::class);
-        $contentType = $contentTypeService->loadContentType($content->contentInfo->contentTypeId);
+        $contentType = $this->contentTypeService->loadContentType($content->contentInfo->contentTypeId);
         $fieldsArray = array();
         $fields = $content->getFields();
         foreach ($fields as $field) {
@@ -204,27 +225,36 @@ class SmileContentService
             if ($value != null) {
                 switch($field->fieldTypeIdentifier) {
                     case 'ezselection':
-                        $values = array();
-                        $options = $contentType->getFieldDefinition($field->fieldDefIdentifier)->getFieldSettings()['options'];
-                        foreach($content->getFieldValue($field->fieldDefIdentifier, $lang)->selection as $selection) {
-                            $values[] = $options[$selection];
+                        $value = implode(', ', $this->getSelectionValue($content, $field->fieldDefIdentifier, $lang));
+                        break;
+                    case 'ezobjectrelation':
+                        $relation = $this->smileFindService->findRelationObjectFromField($content, $field->fieldDefIdentifier);
+                        if ($depth > 0) {
+                            $value = $this->extractContentFields($relation, $useFieldName, $ignoredFields, $lang, $depth-1);
+                        }else {
+                            $value = $relation->getName($lang);
                         }
-                        $value = implode(', ', $values);
                         break;
                     case 'ezobjectrelationlist':
-                        $values = array();
-                        $relations = $this->getContentOfRelations($content, $field->fieldDefIdentifier, true, false);
+                        $relations = $this->smileFindService->findRelationObjectsFromField($content, $field->fieldDefIdentifier);
+                        $value = array();
                         /** @var Content $relation */
                         foreach ($relations as $relation) {
-                            $values[] = $relation->getName($lang);
+                            if ($depth > 0) {
+                                $value[] = $this->extractContentFields($relation, $useFieldName, $ignoredFields, $lang, $depth-1);
+                            }else {
+                                $value[] = $relation->getName($lang);
+                            }
                         }
-                        $value = implode(", ", $values);
                         break;
                     case 'ezboolean':
                         $value = $value->__toString() === "1" ? "✔" : "✕";
                         break;
                     case 'ezdate':
                         $value = $value->date ? $value->date->format("d/m/Y") : null;
+                        break;
+                    case 'ezdatetime':
+                        $value = $value->date ? $value->date->format("d/m/Y H:i:s") : null;
                         break;
                     default:
                         $value = $value->__toString();
@@ -249,5 +279,113 @@ class SmileContentService
         }
 
         return $fieldsArray;
+    }
+
+    /**
+     *
+     * Change the publish date of a content
+     *
+     * @param Content   $content The content you want change the publish date
+     * @param \DateTime $dateTime New date for the content publication
+     * @param boolean   $updateModificationDate If you want to also update the modificationDate
+     *
+     * @return Content The updated content
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     */
+    public function updatePublishDate(Content $content, \DateTime $dateTime, $updateModificationDate = false) {
+        $oldMetadata = $content->versionInfo->contentInfo;
+        $newContentMetadataUpdateStruct = $this->contentService->newContentMetadataUpdateStruct();
+        $newContentMetadataUpdateStruct->ownerId = $oldMetadata->ownerId;
+        $newContentMetadataUpdateStruct->mainLanguageCode = $oldMetadata->mainLanguageCode;
+        $newContentMetadataUpdateStruct->alwaysAvailable = $oldMetadata->alwaysAvailable;
+        $newContentMetadataUpdateStruct->remoteId = $oldMetadata->remoteId;
+        $newContentMetadataUpdateStruct->mainLocationId = $oldMetadata->mainLocationId;
+
+        $newContentMetadataUpdateStruct->publishedDate = $dateTime;
+        $content->contentInfo->publishedDate->setTimestamp($dateTime->getTimestamp());
+        if ($updateModificationDate) {
+            $newContentMetadataUpdateStruct->modificationDate = $dateTime;
+            $content->contentInfo->modificationDate->setTimestamp($dateTime->getTimestamp());
+        }
+        return $this->contentService->updateContentMetadata($content->contentInfo, $newContentMetadataUpdateStruct);
+    }
+
+    /**
+     *
+     * Update content with given data in associative array (keys are fieldIdentifiers, values fields values)
+     *
+     * @param Content $content The content you want to update
+     * @param array   $data An associative array (keys are fieldIdentifiers, values fields values)
+     *
+     * @return Content The new updated content
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\BadStateException
+     * @throws \eZ\Publish\API\Repository\Exceptions\ContentFieldValidationException
+     * @throws \eZ\Publish\API\Repository\Exceptions\ContentValidationException
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     */
+    function updateContentFields(Content $content, array $data = array()) {
+        $contentType = $content->getContentType();
+        $contentDraft = $this->contentService->createContentDraft($content->contentInfo);
+        $contentUpdateStruct = $this->contentService->newContentUpdateStruct();
+
+        $providedFields = array_keys($data);
+        $fields = $contentType->getFieldDefinitions();
+        foreach ($fields as $field) {
+            $fieldIdentifier = $field->identifier;
+            if (in_array($fieldIdentifier, $providedFields)) {
+                $contentUpdateStruct->setField($fieldIdentifier, $data[$fieldIdentifier]);
+            }
+        }
+
+        $contentDraft = $this->contentService->updateContent($contentDraft->versionInfo, $contentUpdateStruct);
+
+        $content = $this->contentService->publishVersion($contentDraft->versionInfo);
+
+        return $content;
+    }
+
+    /**
+     * Replace content owner by new owner
+     *
+     * @param Content $content The content to update
+     * @param User    $owner The new owner
+     *
+     * @return Content
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\BadStateException
+     * @throws \eZ\Publish\API\Repository\Exceptions\ContentFieldValidationException
+     * @throws \eZ\Publish\API\Repository\Exceptions\ContentValidationException
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     */
+    function updateContentOwner(Content $content, User $owner) {
+        $contentDraft = $this->contentService->createContentDraft($content->contentInfo);
+        $contentUpdateStruct = $this->contentService->newContentUpdateStruct();
+
+        $contentUpdateStruct->creatorId = $owner->id;
+
+        $contentDraft = $this->contentService->updateContent($contentDraft->versionInfo, $contentUpdateStruct);
+
+        $content = $this->contentService->publishVersion($contentDraft->versionInfo);
+
+        return $content;
+    }
+
+    /**
+     * Load multiple content with given array of ids
+     *
+     * @param array $contentIds
+     *
+     * @return Content[]
+     *
+     * @throws NotFoundException
+     */
+    function loadContents(array $contentIds) {
+        $contents = array();
+        foreach ($contentIds as $contentId) {
+            $contents[] = $this->contentService->loadContent($contentId);
+        }
+        return $contents;
     }
 }

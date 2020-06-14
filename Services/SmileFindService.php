@@ -145,7 +145,7 @@ class SmileFindService
      * @param array            $customSortClauses     Custom sort clauses
      * @param array            $customCriteria        Custom criteria
      *
-     * @return array
+     * @return Content\Location[]
      *
      * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
      *
@@ -203,6 +203,7 @@ class SmileFindService
      *
      * @param Content\Location $parentLocation        The parent location
      * @param String           $contentTypeIdentifier The content type identifier
+     * @param array            $customCriteria        Custom criteria
      *
      * @return int|null
      *
@@ -210,7 +211,8 @@ class SmileFindService
      *
      * @author Steve Cohen <cohensteve@hotmail.fr>
      */
-    public function countChildrenList(Content\Location $parentLocation, String $contentTypeIdentifier = null)
+    public function countChildrenList(Content\Location $parentLocation, String $contentTypeIdentifier = null,
+                                      $customCriteria = null)
     {
         $query = new LocationQuery();
 
@@ -221,6 +223,13 @@ class SmileFindService
         );
         if ($contentTypeIdentifier ) {
             $criteria[] = new Criterion\ContentTypeIdentifier($contentTypeIdentifier);
+        }
+        if ($customCriteria ) {
+            if (is_array($customCriteria)) {
+                $criteria = array_merge($criteria, $customCriteria);
+            } else {
+                $criteria[] = $customCriteria;
+            }
         }
         $query->limit = 0;
 

@@ -14,14 +14,18 @@
 
 namespace Smile\EzHelpersBundle\Services;
 
+use eZ\Publish\API\Repository\Exceptions\NotFoundException;
 use eZ\Publish\API\Repository\Values\Content\Content;
 use eZ\Publish\API\Repository\Values\Content\Location;
+use eZ\Publish\API\Repository\Values\ContentType\FieldDefinition;
 use eZ\Publish\API\Repository\Values\User\Limitation\SubtreeLimitation;
 use eZ\Publish\API\Repository\Values\User\Role;
 use eZ\Publish\API\Repository\Values\User\User;
 use eZ\Publish\API\Repository\Values\User\UserGroup;
+use eZ\Publish\API\Repository\Values\User\UserTokenUpdateStruct;
 use eZ\Publish\Core\SignalSlot\Repository;
-use eZ\Publish\API\Repository\Values\User\Limitation\RoleLimitation;
+use Symfony\Component\HttpFoundation\Session\Session;
+use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorage;
 
 /**
  * Class SmileUserService
@@ -56,14 +60,22 @@ class SmileUserService
 
     protected $roleService;
 
+    protected $tokenStorage;
+
+    protected $session;
+
+    protected $tokenIntervalSpec;
+
     /**
      * SmileUserService constructor.
      *
-     * @param Repository $repository eZPlatform API Repository
+     * @param Repository    $repository eZPlatform API Repository
+     * @param TokenStorage  $tokenStorage The TokenStorage
+     * @param Session       $session The session
      *
      * @author Steve Cohen <cohensteve@hotmail.fr>
      */
-    public function __construct(Repository $repository)
+    public function __construct(Repository $repository, TokenStorage $tokenStorage, Session $session, string $tokenIntervalSpec)
     {
         $this->repository = $repository;
         $this->contentService = $repository->getContentService();
@@ -74,7 +86,18 @@ class SmileUserService
         $this->userService = $repository->getUserService();
         $this->permissionResolver = $repository->getPermissionResolver();
         $this->roleService = $repository->getRoleService();
+        $this->tokenStorage = $tokenStorage;
+        $this->session = $session;
         $this->_lastUser = $this->permissionResolver->getCurrentUserReference();
+        $this->tokenIntervalSpec = $tokenIntervalSpec;
+    }
+
+    /**
+     * @return \eZ\Publish\API\Repository\UserService
+     */
+    public function getUserService(): \eZ\Publish\API\Repository\UserService
+    {
+        return $this->userService;
     }
 
     /**************************************************************
@@ -82,15 +105,57 @@ class SmileUserService
      **************************************************************/
 
     /**
-     * Get the current user
+     * Get the current logged in user
      *
-     * @return \eZ\Publish\API\Repository\Values\User\UserReference
-     *
-     * @author Steve Cohen <cohensteve@hotmail.fr>
+     * @return User
+     * @throws NotFoundException
      */
     public function getCurrentUser()
     {
-        return $this->permissionResolver->getCurrentUserReference();
+       return $this->userService->loadUser(
+            $this->permissionResolver->getCurrentUserReference()->getUserId()
+        );
+    }
+
+    /**
+     * Get a user by username
+     *
+     * @param String $username   The username you are looking for
+     *
+     * @return User|null
+     */
+    public function getUserByUsername($username)
+    {
+        try {
+            return $this->userService->loadUserByLogin($username);
+        } catch (NotFoundException $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Get a user by login
+     *
+     * @param String $login     The username you are looking for
+     *
+     * @return User|null
+     */
+    public function getUserByLogin($login) {
+        return $this->getUserByUsername($login);
+    }
+
+    /**
+     * Get a user by email
+     * @param String $email     The user email you want to fetch
+     *
+     * @return User|null
+     */
+    public function getUserByEmail($email) {
+        try {
+            return count($this->userService->loadUsersByEmail($email)) > 0 ? $this->userService->loadUsersByEmail($email)[0] : null;
+        } catch (NotFoundException $e) {
+            return null;
+        }
     }
 
     /**
@@ -132,9 +197,15 @@ class SmileUserService
      */
     public function login(User $user)
     {
+        // Login ez user
         $this->saveCurrentUser();
         $this->permissionResolver->setCurrentUserReference($user);
-        $this->repository->setCurrentUser($user);
+
+        // Login symfony user
+        $symfonyUser = new \eZ\Publish\Core\MVC\Symfony\Security\User($user, ['ROLE_USER']);
+        $token = new \Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken($symfonyUser, null,'ezpublish_front', $symfonyUser->getRoles());
+        $this->tokenStorage->setToken($token);
+        $this->session->set('_security_ezpublish_front', serialize($token));
 
         return $user;
     }
@@ -192,11 +263,12 @@ class SmileUserService
     /**
      * Create and publish a new user
      *
-     * @param String $login    The login of the new user
-     * @param String $password The password of the new user
-     * @param String $email    The email of the new user
-     * @param array  $groupIds One or more groups to assign the new user
-     * @param String $lang     The lang you want to create your content (default: DefaultLanguageCode)
+     * @param String    $login         The login of the new user
+     * @param String    $password      The password of the new user
+     * @param String    $email         The email of the new user
+     * @param array     $groupIds      One or more groups to assign the new user
+     * @param String    $lang          The lang you want to create your content (default: DefaultLanguageCode)
+     * @param array     $customfields  An associative array of custom fields (as field_identifier => value)
      *
      * @return User
      *
@@ -208,7 +280,7 @@ class SmileUserService
      *
      * @author Steve Cohen <cohensteve@hotmail.fr>
      */
-    public function createUser(String $login, String $password, String $email, array $groupIds, String $lang = null)
+    public function createUser(String $login, String $password, String $email, array $groupIds, String $lang = null, array $customfields = null)
     {
         if ($lang == null) {
             $lang = $this->repository->getContentLanguageService()->getDefaultLanguageCode();
@@ -218,6 +290,13 @@ class SmileUserService
             $groups[] = $this->getUserGroupById($groupId);
         }
         $userCreateStruct = $this->userService->newUserCreateStruct($login, $email, $password, $lang);
+        if (is_array($customfields)) {
+            foreach ($customfields as $identifier => $value) {
+                if ($userCreateStruct->contentType->getFieldDefinition($identifier) instanceof FieldDefinition)
+                $userCreateStruct->setField($identifier, $value);
+            }
+        }
+
         $user = $this->userService->createUser($userCreateStruct, $groups);
 
         return $user;
@@ -412,5 +491,149 @@ class SmileUserService
         $role = $this->roleService->loadRole($id);
 
         return $role;
+    }
+
+    /**
+     * Update the publication date of this user
+     *
+     * @param User      $user
+     * @param \DateTime $dateTime
+     *
+     * @return User
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\ContentFieldValidationException
+     * @throws \eZ\Publish\API\Repository\Exceptions\ContentValidationException
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     */
+    public function updateUserPublishDate(User $user, \DateTime $dateTime) {
+        $oldMetadata = $user->versionInfo->contentInfo;
+        $userStruct = $this->userService->newUserUpdateStruct();
+        $userStruct->contentMetadataUpdateStruct = $this->contentService->newContentMetadataUpdateStruct();
+        $userStruct->contentMetadataUpdateStruct->ownerId = $oldMetadata->ownerId;
+        $userStruct->contentMetadataUpdateStruct->publishedDate = $dateTime;
+        $userStruct->contentMetadataUpdateStruct->mainLanguageCode = $oldMetadata->mainLanguageCode;
+        $userStruct->contentMetadataUpdateStruct->alwaysAvailable = $oldMetadata->alwaysAvailable;
+        $userStruct->contentMetadataUpdateStruct->remoteId = $oldMetadata->remoteId;
+        $userStruct->contentMetadataUpdateStruct->mainLocationId = $oldMetadata->mainLocationId;
+        $userStruct->contentMetadataUpdateStruct->modificationDate = $oldMetadata->modificationDate;
+        $userStruct->contentUpdateStruct = $this->contentService->newContentUpdateStruct();
+        return $this->userService->updateUser($user, $userStruct);
+    }
+
+
+    /**
+     * Update user with given email and password and data for other custom fields in associative array (keys are fieldIdentifiers, values fields values)
+     *
+     * @param User  $user The new updated content
+     * @param null  $email New email
+     * @param null  $password New plain password
+     * @param array $otherFields Other fields in associative array (keys are fieldIdentifiers, values fields values)
+     *
+     * @return Content
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\BadStateException
+     * @throws \eZ\Publish\API\Repository\Exceptions\ContentFieldValidationException
+     * @throws \eZ\Publish\API\Repository\Exceptions\ContentValidationException
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     */
+    function updateUserFields(User $user, $email = null, $password = null, array $otherFields = array()) {
+        $userUpdateStruct = $this->userService->newUserUpdateStruct();
+        $userUpdateStruct->contentUpdateStruct = $this->contentService->newContentUpdateStruct();
+
+        if ($email !== null) {
+            $userUpdateStruct->email = $email;
+        }
+        if ($password !== null) {
+            $userUpdateStruct->password = $password;
+        }
+
+        $providedFields = array_keys($otherFields);
+        $fields = $user->getContentType()->getFieldDefinitions();
+        foreach ($fields as $field) {
+            $fieldIdentifier = $field->identifier;
+            if (in_array($fieldIdentifier, $providedFields)) {
+                $userUpdateStruct->contentUpdateStruct->setField($fieldIdentifier, $otherFields[$fieldIdentifier]);
+            }
+        }
+
+        $updatedUser = $this->userService->updateUser($user, $userUpdateStruct);
+
+        //$content = $this->contentService->publishVersion($userDraft->versionInfo);
+
+        return $updatedUser;
+    }
+
+    /**
+     * Check the user password is valid
+     *
+     * @param User   $user User you want to check the password
+     * @param String $password Plain password
+     *
+     * @return bool
+     */
+    public function checkPasswordOfUser(User $user, String $password) {
+        return password_verify($password, $user->passwordHash);
+    }
+
+    /**
+     * Check the user password is valid
+     *
+     * @param        $userId User ID you want to check the password
+     * @param String $password Plain password
+     *
+     * @return bool
+     * @throws NotFoundException
+     */
+    public function checkPasswordOfUserId($userId, String $password) {
+        return $this->checkPasswordOfUser($this->userService->loadUser($userId), $password);
+    }
+
+    /**
+     * Check the user password is valid
+     *
+     * @param String $login User login you want to check the password
+     * @param String $password Plain password
+     *
+     * @return bool
+     * @throws NotFoundException
+     */
+    public function checkPasswordOfUserLogin(String $login, String $password) {
+        return $this->checkPasswordOfUser($this->userService->loadUserByLogin($login), $password);
+    }
+
+    /**
+     *
+     * Change user password immediately
+     *
+     * @param User   $user
+     * @param String $password
+     *
+     * @return Content
+     * @throws \eZ\Publish\API\Repository\Exceptions\BadStateException
+     * @throws \eZ\Publish\API\Repository\Exceptions\ContentFieldValidationException
+     * @throws \eZ\Publish\API\Repository\Exceptions\ContentValidationException
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     */
+    public function changePassword(User $user, String $password)
+    {
+        return $this->updateUserFields($user, null, $password);
+    }
+
+    /**
+     * @param User $user
+     *
+     * @return string
+     * @throws \Exception
+     */
+    public function updateUserToken(User $user): string
+    {
+        $struct = new UserTokenUpdateStruct();
+        $struct->hashKey = bin2hex(random_bytes(16));
+        $date = new \DateTime();
+        $date->add(new \DateInterval($this->tokenIntervalSpec));
+        $struct->time = $date;
+        $this->userService->updateUserToken($user, $struct);
+
+        return $struct->hashKey;
     }
 }
