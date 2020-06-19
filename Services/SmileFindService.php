@@ -144,15 +144,22 @@ class SmileFindService
      * @param int              $offset                The offset
      * @param array            $customSortClauses     Custom sort clauses
      * @param array            $customCriteria        Custom criteria
+     * @param bool             $queryOnly             Return LocationQuery instead of result
      *
-     * @return Content\Location[]
+     * @return Content\Location[]|LocationQuery
      *
      * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
      *
      * @author Steve Cohen <cohensteve@hotmail.fr>
      */
-    public function findChildrenList(Content\Location $parentLocation, $contentTypeIdentifier = null, $limit = 0,
-         $offset = 0, $customSortClauses = null, $customCriteria = null
+    public function findChildrenList(
+        Content\Location $parentLocation,
+        $contentTypeIdentifier = null,
+        $limit = 0,
+        $offset = 0,
+        $customSortClauses = null,
+        $customCriteria = null,
+        $queryOnly = false
     ) {
         $query = new LocationQuery();
 
@@ -194,6 +201,7 @@ class SmileFindService
         if ($offset > 0 ) {
             $query->offset = $offset;
         }
+        if ($queryOnly) return $query;
 
         return $this->_prepareResults($this->searchService->findLocations($query));
     }
