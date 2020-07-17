@@ -1,3 +1,6 @@
+imports:
+    - { resource: commands.yml }
+
 parameters:
     smile.find.class: Smile\EzHelpersBundle\Services\SmileFindService
     smile.content.class: Smile\EzHelpersBundle\Services\SmileContentService

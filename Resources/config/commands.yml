@@ -1,0 +1,10 @@
+parameters:
+    stevecohenfr.ezhelpers.command.delete_content.class: Smile\EzHelpersBundle\Command\DeleteContentCommand
+
+services:
+    stevecohenfr.ezhelpers.command.delete_content:
+        class: '%stevecohenfr.ezhelpers.command.delete_content.class%'
+        arguments:
+            - '@ezpublish.api.repository'
+        tags:
+            - { name: console.command, command: stevecohenfr:content:delete }
