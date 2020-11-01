@@ -280,7 +280,7 @@ class SmileUserService
      *
      * @author Steve Cohen <cohensteve@hotmail.fr>
      */
-    public function createUser(String $login, String $password, String $email, array $groupIds, String $lang = null, array $customfields = null)
+    public function createUser(String $login, String $password, String $email, array $groupIds, String $lang = null, array $customfields = null, $enabled = true)
     {
         if ($lang == null) {
             $lang = $this->repository->getContentLanguageService()->getDefaultLanguageCode();
@@ -296,6 +296,8 @@ class SmileUserService
                 $userCreateStruct->setField($identifier, $value);
             }
         }
+
+        $userCreateStruct->enabled = $enabled;
 
         $user = $this->userService->createUser($userCreateStruct, $groups);
 
@@ -635,5 +637,64 @@ class SmileUserService
         $this->userService->updateUserToken($user, $struct);
 
         return $struct->hashKey;
+    }
+
+    /**
+     * Enable (or disable) a user
+     *
+     * @param User $user User to enable/disable
+     * @param bool $enable
+     *
+     * @return User
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\ContentFieldValidationException
+     * @throws \eZ\Publish\API\Repository\Exceptions\ContentValidationException
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     */
+    public function enableUser(User $user, $enable = true)
+    {
+        $userUpdateStruct = $this->userService->newUserUpdateStruct();
+        $userUpdateStruct->contentUpdateStruct = $this->contentService->newContentUpdateStruct();
+        $userUpdateStruct->enabled = $enable;
+
+        return $this->userService->updateUser($user, $userUpdateStruct);
+    }
+
+    /**
+     * Activate a user
+     * Alias of SmileUserService::enableUser()
+     *
+     * @param User $user
+     *
+     * @return User
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\ContentFieldValidationException
+     * @throws \eZ\Publish\API\Repository\Exceptions\ContentValidationException
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     *
+     * @see SmileUserService::enableUser()
+     */
+    public function activateUser(User $user)
+    {
+        return $this->enableUser($user);
+    }
+
+    /**
+     * Disable a user
+     *
+     * @param User $user
+     *
+     * @return User
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\ContentFieldValidationException
+     * @throws \eZ\Publish\API\Repository\Exceptions\ContentValidationException
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     * @throws \eZ\Publish\API\Repository\Exceptions\UnauthorizedException
+     */
+    public function disableUser(User $user)
+    {
+        return $this->enableUser($user, false);
     }
 }

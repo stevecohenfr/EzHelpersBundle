@@ -1,5 +1,6 @@
 parameters:
     stevecohenfr.ezhelpers.command.delete_content.class: Smile\EzHelpersBundle\Command\DeleteContentCommand
+    stevecohenfr.ezhelpers.command.subtree_delete.class: Smile\EzHelpersBundle\Command\DeleteSubtreeCommand
 
 services:
     stevecohenfr.ezhelpers.command.delete_content:
@@ -8,3 +9,11 @@ services:
             - '@ezpublish.api.repository'
         tags:
             - { name: console.command, command: stevecohenfr:content:delete }
+
+    stevecohenfr.ezhelpers.command.subtree_delete:
+        class: '%stevecohenfr.ezhelpers.command.subtree_delete.class%'
+        arguments:
+            - '@ezpublish.api.repository'
+            - '@smile.find'
+        tags:
+            - { name: console.command, command: stevecohenfr:subtree:delete }

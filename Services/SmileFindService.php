@@ -136,6 +136,42 @@ class SmileFindService
     }
 
     /**
+     * Count all the children in the parent tree
+     *
+     * @param Content\Location $parentLocation
+     * @param null $contentTypeIdentifier
+     * @param null $customCriteria
+     *
+     * @return int|null
+     *
+     * @throws \eZ\Publish\API\Repository\Exceptions\InvalidArgumentException
+     */
+    public function countChildrenTree(Content\Location $parentLocation, $contentTypeIdentifier = null,
+                                      $customCriteria = null) {
+        $query = new LocationQuery();
+
+        $criteria = array(
+            new Criterion\Subtree($parentLocation->pathString),
+            new Criterion\LogicalNot(new Criterion\LocationId($parentLocation->id))
+        );
+        if ($contentTypeIdentifier) {
+            $criteria[] = new Criterion\ContentTypeIdentifier($contentTypeIdentifier);
+        }
+        if ($customCriteria) {
+            if (is_array($customCriteria)) {
+                $criteria = array_merge($criteria, $customCriteria);
+            } else {
+                $criteria[] = $customCriteria;
+            }
+        }
+        $query->filter = new Criterion\LogicalAnd($criteria);
+
+        $query->limit = 0;
+
+        return $this->searchService->findLocations($query)->totalCount;
+    }
+
+    /**
      * Find all children in the first depth of the parent
      *
      * @param Content\Location $parentLocation        The parent location
@@ -183,7 +219,7 @@ class SmileFindService
 
         /* Sort Clauses */
         $sortClauses =  array(
-            new Content\Query\SortClause\Location\Priority(Content\Query::SORT_ASC)
+            new Content\Query\SortClause\Location\Priority(Content\Query::SORT_DESC)
         );
         if ($customSortClauses) {
             if (is_array($customSortClauses)) {
